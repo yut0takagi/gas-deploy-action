@@ -1093,6 +1093,27 @@ git commit -m "feat(core): .claspignore 互換の除外判定を追加"
 
 ## Task 7: file-collector
 
+> **実測で判明した追加のテストケース（Task 5 のスパイク）**
+>
+> 実在プロジェクトと検証用プロジェクトの両方で、**`app.js.html` が name=`app.js` / type=`HTML` として格納される**ことを確認した。HTML テンプレートに JS を埋め込む GAS の定番パターンである。
+>
+> 拡張子を1つだけ剥がす現在の実装で正しく一致するが、「`.js` で終わる名前が HTML 種別になる」という直感に反する挙動なので、**テストケースに含めること**。
+>
+> ```typescript
+>   it('strips only the final extension, so Foo.js.html becomes an HTML file named Foo.js', async () => {
+>     const root = await makeProject({
+>       'appsscript.json': MANIFEST,
+>       'app.js.html': '<script></script>',
+>     });
+>
+>     const files = await collectFiles(root, []);
+>
+>     expect(files).toContainEqual({ name: 'app.js', type: 'HTML', source: '<script></script>' });
+>   });
+> ```
+>
+> また、サブディレクトリが `/` 区切りで表現できることも実測で確定した（`ui/Sidebar`）。既存のテストの想定どおりで変更は不要。
+
 **Files:**
 - Create: `packages/core/src/file-collector.ts`
 - Create: `packages/core/src/file-collector.test.ts`
@@ -1486,6 +1507,32 @@ git commit -m "feat(core): 改行正規化つきの差分計算を追加"
 
 リトライをここに閉じ込めることで、`deployer` はリトライを知らずに済む。
 
+> **⚠️ 実測に基づく必須の修正（Task 5 のスパイクで判明）**
+>
+> 下記 Step 3 の `listDeployments` は**そのままでは壊れている**。`deployments.list` は `pageSize` を指定しないと **1件しか返さない**（21件ある状態で実測）。この実装では常に1を返し、Task 10 の警告が永久に発火しない。
+>
+> `listDeployments` を次の形にすること。定数 `DEPLOYMENTS_PAGE_SIZE = 50` を他の定数と並べて定義する。
+>
+> ```typescript
+>   async listDeployments(scriptId: string): Promise<Deployment[]> {
+>     const all: RawDeployment[] = [];
+>     let pageToken: string | undefined;
+>     do {
+>       const query = new URLSearchParams({ pageSize: String(DEPLOYMENTS_PAGE_SIZE) });
+>       if (pageToken) query.set('pageToken', pageToken);
+>       const result = (await this.request('GET', `/projects/${scriptId}/deployments?${query}`)) as {
+>         deployments?: RawDeployment[];
+>         nextPageToken?: string;
+>       };
+>       all.push(...(result.deployments ?? []));
+>       pageToken = result.nextPageToken;
+>     } while (pageToken);
+>     return all.map(toDeployment);
+>   }
+> ```
+>
+> テストも合わせて追加すること。(a) `pageSize` がクエリに載ること、(b) `nextPageToken` が返ったら2ページ目を取得して結合すること。既存の「lists deployments」テストは URL にクエリが付くようになるため期待値の更新が必要。
+
 > **スペックからの意図的な逸脱:** スペック §8 では MSW を使うと記述したが、`fetch` を引数で差し替える設計にしたため、スタブ関数で同等の検証ができる。依存を1つ減らすため MSW は導入しない。
 
 **Files:**
@@ -1820,6 +1867,23 @@ git commit -m "feat(core): リトライ込みの Apps Script API クライアン
 ## Task 10: deployer オーケストレーション
 
 `deploymentId` 未指定時の警告が、本番事故（Web アプリの URL 変化）を防ぐ唯一の防波堤である。
+
+> **⚠️ 実測に基づく必須の修正（Task 5 のスパイクで判明）**
+>
+> 上限は「**バージョン付きデプロイ20個**」で確定した（21個目で `FAILED_PRECONDITION`）。`@HEAD` デプロイは新規プロジェクトにも最初から1件存在し、**上限の対象外**である。
+>
+> したがって `deployments.length` をそのまま数えると1件ずれる。**バージョン番号を持つものだけを数えること。**
+>
+> ```typescript
+>   const versioned = deployments.filter((deployment) => deployment.versionNumber !== undefined);
+>   if (versioned.length >= DEPLOYMENT_COUNT_WARN_THRESHOLD) {
+>     warnings.push(
+>       `バージョン付きデプロイが ${versioned.length} 件あります。上限は20件です。不要なデプロイを削除してください`,
+>     );
+>   }
+> ```
+>
+> 警告文も「上限は20件」と断定してよい（実測済み）。テストの `listDeployments` スタブは `versionNumber` を持つデプロイを返すようにすること。
 
 **Files:**
 - Create: `packages/core/src/deployer.ts`
@@ -2504,6 +2568,25 @@ git commit -m "ci: typecheck / test / dist 同期チェックのワークフロ�
 ## Task 13: clasp 互換ゴールデンテスト
 
 案 A（API 直叩き）の最大のリスクは「clasp 互換を自前で保証する責任」である。ここで固定する。
+
+> **⚠️ 方式変更（Task 5 のスパイクで判明）**
+>
+> clasp v3 には **`clasp status --json`** があり、push 対象のファイル判定を**機械可読な形で、ネットワークなしに**取得できる。実測した出力:
+>
+> ```json
+> {"filesToPush":["app.js.html","appsscript.json","Code.js","Legacy.gs","ui/Sidebar.html"],
+>  "untrackedFiles":[".clasp.json",".claspignore","Code.test.js","ignored.txt"]}
+> ```
+>
+> 「一度記録した fixture と照合する」のではなく、**テスト実行時に実際の clasp を呼び出して突き合わせられる**。互換性の保証が一段強くなり、fixture の陳腐化も起きない。
+>
+> ただし `clasp status` は `.clasp.json`（scriptId を含む）を必要とする。fixture ディレクトリに scriptId を含むファイルを置きたくないので、**テスト実行時に一時ディレクトリへ fixture をコピーし、ダミーの scriptId を持つ `.clasp.json` を生成してから `clasp status --json` を実行する**構成にすること。`clasp status` がネットワークや認証を要求しないことは実測で確認済み。
+>
+> `@google/clasp` を devDependency に追加する。CI で clasp のインストールが失敗した場合にテスト全体が落ちないよう、clasp が利用できない環境ではこのテストをスキップする（`it.skipIf`）判断も検討すること。
+>
+> **また、`.clasp.json` は v3 で拡張されており、拡張子とファイル種別の対応（`scriptExtensions` / `htmlExtensions` / `jsonExtensions`）と push 順序（`filePushOrder`）がプロジェクトごとに設定可能になっている。** v0.1 では既定値のみ対応とし、README に明記する。
+
+（以下は当初の方式。上記の変更が適用できない場合のフォールバックとして残す。）
 
 clasp を実行するには認証とネットワークが必要なため、**clasp の出力を一度だけ記録した fixture** と照合する方式にする。fixture の再生成手順を併せて残すことで、clasp 側の変更に追従できるようにする。
 
