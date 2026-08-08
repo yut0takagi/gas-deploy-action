@@ -21742,12 +21742,23 @@ var PARSE_FAILURE_NEXT_STEPS = [
   "\u30D7\u30ED\u30AD\u30B7\u3084\u30D5\u30A1\u30A4\u30A2\u30A6\u30A9\u30FC\u30EB\u304C\u5FDC\u7B54\u3092\u66F8\u304D\u63DB\u3048\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u4E00\u6642\u7684\u306A\u969C\u5BB3\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\u3057\u3070\u3089\u304F\u5F85\u3063\u3066\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
+var SCOPE_NEXT_STEPS = [
+  "\u8A8D\u8A3C\u60C5\u5831\u306B script.projects \u3068 script.deployments \u306E\u4E21\u65B9\u304C\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+  "\u30EA\u30D5\u30EC\u30C3\u30B7\u30E5\u30C8\u30FC\u30AF\u30F3\u306F\u5143\u3005\u4ED8\u4E0E\u3055\u308C\u305F\u30B9\u30B3\u30FC\u30D7\u306E\u7BC4\u56F2\u5185\u3067\u3057\u304B\u7D5E\u308A\u8FBC\u3081\u307E\u305B\u3093\u3002\u4E0D\u8DB3\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u8A8D\u8A3C\u3092\u3084\u308A\u76F4\u3059\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059",
+  "clasp login \u3067\u767A\u884C\u3057\u305F\u8A8D\u8A3C\u60C5\u5831\u306B\u306F\u3053\u306E2\u3064\u304C\u542B\u307E\u308C\u307E\u3059",
+  "\u81EA\u524D\u306E OAuth \u30AF\u30E9\u30A4\u30A2\u30F3\u30C8\u3092\u4F7F\u3046\u5834\u5408\u306F\u3001\u540C\u610F\u753B\u9762\u306B\u3053\u306E2\u3064\u306E\u30B9\u30B3\u30FC\u30D7\u3092\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"
+];
+var REQUESTED_SCOPES = [
+  "https://www.googleapis.com/auth/script.projects",
+  "https://www.googleapis.com/auth/script.deployments"
+].join(" ");
 async function getAccessToken(credentials, fetchImpl = fetch) {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
     refresh_token: credentials.refreshToken,
-    grant_type: "refresh_token"
+    grant_type: "refresh_token",
+    scope: REQUESTED_SCOPES
   });
   let response;
   try {
@@ -21772,10 +21783,22 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
     });
   }
   if (!response.ok) {
-    throw new GasDeployError(`\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`, {
-      cause: text,
-      nextSteps: EXPIRY_NEXT_STEPS
-    });
+    let oauthError;
+    try {
+      const parsedError = JSON.parse(text);
+      if (typeof parsedError.error === "string") {
+        oauthError = parsedError.error;
+      }
+    } catch {
+    }
+    const isScopeProblem = oauthError === "invalid_scope";
+    throw new GasDeployError(
+      isScopeProblem ? `\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})` : `\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`,
+      {
+        cause: text,
+        nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS
+      }
+    );
   }
   let parsed;
   try {
