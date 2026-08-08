@@ -40,4 +40,9 @@ describe('classifyApiError', () => {
     const err = classifyApiError(500, 'boom');
     expect(err.message).toContain('500');
   });
+
+  it('preserves the raw response body as the error cause', () => {
+    const err = classifyApiError(401, '{"error":"invalid_grant"}');
+    expect(err.cause).toBe('{"error":"invalid_grant"}');
+  });
 });

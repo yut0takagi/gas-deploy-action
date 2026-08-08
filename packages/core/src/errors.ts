@@ -1,3 +1,8 @@
+/**
+ * `cause` には API の生レスポンスなど、秘匿情報を含みうる文字列が入る。
+ * ユーザーに見せてよいのは `format()` の出力だけで、`cause` は決して直接ログに出さないこと。
+ * エラーオブジェクトをそのまま文字列化すると Node が cause chain を展開して出力する点に注意。
+ */
 export interface ErrorDetails {
   nextSteps?: string[];
   cause?: unknown;
