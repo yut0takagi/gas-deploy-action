@@ -241,7 +241,7 @@ outputs:
 | `ui/Sidebar.html` | `ui/Sidebar` | `HTML` |
 | `appsscript.json` | `appsscript` | `JSON` |
 
-`.claspignore` があれば読み、`ignore` 設定とマージする（glob 記法は clasp と同一）。`appsscript.json` が存在しない場合は `updateContent` が必ず失敗するため、**API を叩く前にローカルでエラーとする**。
+`.claspignore` があれば読むが、`ignore` 設定が非空の場合は `.claspignore` を読まずに `ignore` の内容で**置き換える**（マージはしない。glob 記法は clasp と同一）。`appsscript.json` が存在しない場合は `updateContent` が必ず失敗するため、**API を叩く前にローカルでエラーとする**。
 
 **TypeScript のトランスパイルは実装しない。** clasp v2 は `.ts` を独自にトランスパイルするが、これは意図的に非互換とする。モダンな GAS 開発では esbuild / rollup による自前ビルドが主流であり、clasp の独自変換は制御しづらい。`rootDir` に**ビルド済み JS を置く前提**とし、README に明記する。これは機能ではなく**割り切り**として文書化する。
 
