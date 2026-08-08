@@ -14,9 +14,9 @@
  *
  * 安全性についての注意:
  *   このスクリプトはアクセストークン・リフレッシュトークン・クライアントシークレット・
- *   ファイルの source 本文を一切 console.log しない。[7] は .clasprc.json の構造を
+ *   ファイルの source 本文を一切 console.log しない。[2] は .clasprc.json の構造を
  *   調べるためにキー名と値の「型」のみを出力し、値そのもの（文字列・数値）は出力しない。
- *   さらに [7] は "@" を含むキー名（アカウントのメールアドレスである可能性が高い）を
+ *   さらに [2] は "@" を含むキー名（アカウントのメールアドレスである可能性が高い）を
  *   `<メールアドレス>` に置き換えてから出力する（maskKeyName）。ただしこれはヒューリスティック
  *   であり、メールアドレス以外の形式の個人識別子までは伏せられない。この出力は将来
  *   公開リポジトリにコミットされる想定のため、貼り付ける前に必ず人間が目視で確認すること。
@@ -37,36 +37,7 @@ async function main(): Promise<void> {
   const credentials = parseCredentials(rawCredentials!);
   console.log('[1] credentials のパース: OK');
 
-  const accessToken = await getAccessToken(credentials);
-  console.log('[2] アクセストークン取得: OK');
-
-  const tokenInfoResponse = await fetch(
-    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
-  );
-  const tokenInfo = (await tokenInfoResponse.json()) as { scope?: string };
-  console.log('[3] 付与されているスコープ:');
-  for (const scope of (tokenInfo.scope ?? '').split(' ')) {
-    console.log(`      ${scope}`);
-  }
-
-  const contentResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/content`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const content = (await contentResponse.json()) as { files?: Array<{ name: string; type: string }> };
-  console.log(`[4] getContent: ${contentResponse.status}`);
-  for (const file of content.files ?? []) {
-    console.log(`      ${file.type.padEnd(10)} ${file.name}`);
-  }
-  const hasSlash = (content.files ?? []).some((f) => f.name.includes('/'));
-  console.log(`[5] name に "/" を含むファイルの有無: ${hasSlash ? 'あり' : 'なし'}`);
-
-  const deploymentsResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/deployments`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const deployments = (await deploymentsResponse.json()) as { deployments?: unknown[] };
-  console.log(`[6] 現在のデプロイ数: ${(deployments.deployments ?? []).length}`);
-
-  console.log('[7] credentials のトップレベル構造（キー名のみ）:');
+  console.log('[2] credentials のトップレベル構造（キー名のみ）:');
   try {
     // parseCredentials が返すのは抽出後の Credentials であり、元の JSON 構造（複数ユーザーを
     // 保持しうるかどうか）を失っている。#6 の検証には元の生 JSON の形を見る必要があるため、
@@ -76,6 +47,35 @@ async function main(): Promise<void> {
   } catch {
     console.log('      (JSON として再解析できませんでした)');
   }
+
+  const accessToken = await getAccessToken(credentials);
+  console.log('[3] アクセストークン取得: OK');
+
+  const tokenInfoResponse = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
+  );
+  const tokenInfo = (await tokenInfoResponse.json()) as { scope?: string };
+  console.log('[4] 付与されているスコープ:');
+  for (const scope of (tokenInfo.scope ?? '').split(' ')) {
+    console.log(`      ${scope}`);
+  }
+
+  const contentResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/content`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const content = (await contentResponse.json()) as { files?: Array<{ name: string; type: string }> };
+  console.log(`[5] getContent: ${contentResponse.status}`);
+  for (const file of content.files ?? []) {
+    console.log(`      ${file.type.padEnd(10)} ${file.name}`);
+  }
+  const hasSlash = (content.files ?? []).some((f) => f.name.includes('/'));
+  console.log(`[6] name に "/" を含むファイルの有無: ${hasSlash ? 'あり' : 'なし'}`);
+
+  const deploymentsResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/deployments`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const deployments = (await deploymentsResponse.json()) as { deployments?: unknown[] };
+  console.log(`[7] 現在のデプロイ数: ${(deployments.deployments ?? []).length}`);
 }
 
 /**
