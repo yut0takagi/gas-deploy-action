@@ -138,6 +138,44 @@ tokens: object
 
 実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
 
+## スコープの絞り込み（実測）— #2 の決着
+
+**当初の実装は「最小権限」を謳いながら、実際には clasp の広いスコープをそのまま使っていた。**
+
+`getAccessToken` はリフレッシュ交換時に `scope` を指定していなかった。RFC 6749 §6 では `scope` 省略時、**元のリフレッシュトークンに付与された全スコープ**が返る。v0.1 の現実的な認証経路は clasp 由来の `.clasprc.json` だけなので、手にするトークンは clasp の 13 スコープを持っていた。シークレットが漏れた場合の被害範囲は、README が「避けられる」と書いていたまさにその広さだった。
+
+Google がリフレッシュ交換での絞り込みを受け付けるかを実測した:
+
+```
+scope 指定なし → 13 スコープ
+    email, profile, cloud-platform, drive.file, drive.metadata.readonly,
+    logging.read, script.deployments, script.projects, script.webapp.deploy,
+    service.management, userinfo.email, userinfo.profile, openid
+
+scope 指定あり → 2 スコープ
+    script.projects, script.deployments
+```
+
+**Google は絞り込みを受け付ける。** よって直すべきは README ではなく実装だった。`scope` を明示的に渡すよう修正済み。
+
+### #2 script.webapp.deploy の要否 — 解決済み（不要）
+
+絞り込んだ2スコープのトークンで、実際に全操作を試した:
+
+```
+getContent          HTTP 200 OK
+updateContent       HTTP 200 OK
+versions.create     HTTP 200 OK  version=3
+deployments.create  HTTP 200 OK
+deployments.delete  HTTP 200 OK
+```
+
+**`script.webapp.deploy` は不要。** `script.projects` と `script.deployments` の2つで足りる。setup-cli を待たずに確定した。
+
+なお、この修正によって `invalid_scope` という新しい失敗経路が生まれた。元々付与されていないスコープは絞り込めないため、自前 OAuth クライアントでスコープが不足している場合に発生する。専用の案内を出すよう対応済み。
+
+---
+
 ## 本実装による実 API での通し確認（E2E）
 
 `packages/core` の `deploy()` を、検証専用プロジェクトに対して実際に実行した。**clasp を介さず、我々自身の書き込み経路を通した唯一の確認**である。

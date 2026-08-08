@@ -58,6 +58,8 @@ Apps Script API は Google 側の仕様としてサービスアカウントの�
 
 clasp は Drive 全体を含む遥かに広いスコープを要求する。**最小権限であること自体をセキュリティ上の差別化とする。**
 
+**リフレッシュ交換時に `scope` を明示的に指定すること。** 省略すると元のリフレッシュトークンに付与された全スコープがそのまま返る（RFC 6749 §6）。clasp 由来の認証情報をそのまま受理する設計である以上、指定を省略すればこの差別化は成立しない。Google が絞り込みを受け付けること、およびこの2スコープで全操作が動くことは実測で確認済み（§10 #2）。
+
 ---
 
 ## 3. 既存 OSS との差別化
@@ -431,7 +433,7 @@ access token と credentials は `@actions/core.setSecret()` で必ずマスク�
 | # | 内容 | 影響 | 検証タイミング |
 |---|---|---|---|
 | 1 | ~~clasp v3 の `.clasprc.json` スキーマ~~ | **解決済み。** 実物は `{ tokens: { <アカウント名>: { client_id, client_secret, type, refresh_token, access_token, ... } } }`。両形式パースで吸収できている | 実測で確定 |
-| 2 | Web アプリのデプロイに `script.webapp.deploy` が必要か | **clasp 経由では判別不能。** clasp は `cloud-platform` を含む広範なスコープを要求するため常に付与される。最小スコープを自前発行する setup-cli で確定させる | v1.0（setup-cli） |
+| 2 | ~~Web アプリのデプロイに `script.webapp.deploy` が必要か~~ | **解決済み。不要。** リフレッシュ交換時に `scope` を指定して2スコープに絞ったトークンで、`getContent` / `updateContent` / `versions.create` / `deployments.create` の全てが成功した。setup-cli を待たずに確定 | 実測で確定 |
 | 3 | `script.projects` が Google の審査対象スコープ（sensitive/restricted）か | **個人 Gmail 対応の難易度を左右する最大の不確定要素** | **v0.1 実装初日** |
 | 4 | ~~デプロイ数上限20の真偽と正確な単位~~ | **解決済み。バージョン付きデプロイ20個まで**（`@HEAD` は別枠。21個目で `FAILED_PRECONDITION`）。**併せて `deployments.list` の重大な落とし穴が判明（下記）** | 実測で確定 |
 | 5 | ~~サブディレクトリを `name` に `/` 区切りで表現できるか~~ | **解決済み。できる**（`ui/Sidebar` として格納される） | 実測で確定 |
