@@ -1,0 +1,54 @@
+name: 'Deploy Google Apps Script'
+description: 'Apps Script API を直接呼び出して Google Apps Script プロジェクトをデプロイします'
+branding:
+  icon: 'upload-cloud'
+  color: 'yellow'
+
+inputs:
+  credentials:
+    description: 'clasp の .clasprc.json、または {client_id, client_secret, refresh_token} の JSON'
+    required: true
+  script-id:
+    description: 'デプロイ先の scriptId'
+    required: true
+  root-dir:
+    description: 'アップロードするファイルのルートディレクトリ'
+    required: false
+    default: '.'
+  deployment-id:
+    description: '更新する既存デプロイの ID。省略すると新規デプロイが作成され Web アプリの URL が変わります'
+    required: false
+  project-type:
+    description: 'webapp | addon | bound | standalone'
+    required: false
+    default: 'standalone'
+  ignore:
+    description: '除外パターン（改行区切り）。省略時は .claspignore、それも無ければ既定値を使います'
+    required: false
+  dry-run:
+    description: '差分の表示のみ行い、書き込みを行いません'
+    required: false
+    default: 'false'
+  create-version:
+    description: 'バージョン作成とデプロイを行うかどうか'
+    required: false
+    default: 'true'
+  description:
+    description: 'バージョンの説明。省略時は ci-<sha7>-<run_number>'
+    required: false
+
+outputs:
+  changed:
+    description: '差分があったかどうか（true / false）'
+  version-number:
+    description: '作成されたバージョン番号'
+  deployment-id:
+    description: '更新または作成されたデプロイ ID'
+  web-app-url:
+    description: 'Web アプリの URL（該当する場合）'
+  summary:
+    description: '人間可読のサマリ（Markdown）'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
