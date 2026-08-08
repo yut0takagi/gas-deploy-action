@@ -10,6 +10,17 @@ const EXPIRY_NEXT_STEPS = [
   '認証情報を再発行し、GitHub Secrets を更新してください',
 ];
 
+const CONNECTIVITY_NEXT_STEPS = [
+  'ランナーからインターネットに到達できるか確認してください',
+  'プロキシやファイアウォールで oauth2.googleapis.com が遮断されていないか確認してください',
+  '一時的な障害の可能性があります。しばらく待って再実行してください',
+];
+
+const PARSE_FAILURE_NEXT_STEPS = [
+  'プロキシやファイアウォールが応答を書き換えていないか確認してください',
+  '一時的な障害の可能性があります。しばらく待って再実行してください',
+];
+
 /**
  * refresh token を access token に交換する。
  * credentials に access token が含まれていても使わず、常に新規取得する。
@@ -25,11 +36,20 @@ export async function getAccessToken(
     grant_type: 'refresh_token',
   });
 
-  const response = await fetchImpl(TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(TOKEN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+  } catch (cause) {
+    // ネットワーク層の失敗。送信した credentials は含まれないため cause を保持してよい。
+    throw new GasDeployError('トークンエンドポイントに接続できませんでした', {
+      cause,
+      nextSteps: CONNECTIVITY_NEXT_STEPS,
+    });
+  }
 
   const text = await response.text();
 
@@ -43,22 +63,28 @@ export async function getAccessToken(
     });
   }
 
-  let parsed: { access_token?: string };
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(text) as { access_token?: string };
+    parsed = JSON.parse(text);
   } catch {
-    // SyntaxError のメッセージは解析対象の文字列の断片をそのまま含む。ここでの解析対象は
-    // 成功応答（アクセストークンを含みうる）なので、cause には載せない。
-    throw new GasDeployError('トークンエンドポイントの応答を解析できませんでした');
+    // SyntaxError のメッセージは解析対象の断片を含む。成功時の応答には有効な access token が
+    // 入るため、cause には載せない。
+    throw new GasDeployError('トークンエンドポイントの応答を解析できませんでした', {
+      nextSteps: PARSE_FAILURE_NEXT_STEPS,
+    });
   }
 
-  if (!parsed.access_token) {
-    // 200 応答本文には access_token 以外のトークン material（id_token 等）が
-    // 含まれている可能性があるため、cause には載せない。
+  const accessToken =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { access_token?: unknown }).access_token
+      : undefined;
+
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    // 200 応答でも id_token など他のトークン素材を含みうるため、cause には載せない。
     throw new GasDeployError('トークンエンドポイントの応答に access_token が含まれていません', {
       nextSteps: EXPIRY_NEXT_STEPS,
     });
   }
 
-  return parsed.access_token;
+  return accessToken;
 }

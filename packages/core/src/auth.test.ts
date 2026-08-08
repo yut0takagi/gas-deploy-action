@@ -30,6 +30,7 @@ describe('getAccessToken', () => {
     expect(params.get('grant_type')).toBe('refresh_token');
     expect(params.get('refresh_token')).toBe('refresh-value');
     expect(params.get('client_id')).toBe('cid.apps.googleusercontent.com');
+    expect(params.get('client_secret')).toBe('secret-value');
   });
 
   it('explains the 7-day testing-status expiry when the exchange fails', async () => {
@@ -64,5 +65,35 @@ describe('getAccessToken', () => {
     })();
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.cause).toBeUndefined();
+  });
+
+  it('reports a guided error when the response body is not an object', async () => {
+    const fetchImpl = stubFetch(200, 'null');
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.length).toBeGreaterThan(0);
+  });
+
+  it('wraps a network-level failure in a guided error', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.join('\n')).toContain('プロキシ');
   });
 });
