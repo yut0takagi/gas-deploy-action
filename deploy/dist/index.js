@@ -8,6 +8,10 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -24,6 +28,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/@actions/core/lib/utils.js
 var require_utils = __commonJS({
@@ -21576,6 +21581,12 @@ var require_picomatch2 = __commonJS({
 });
 
 // deploy/src/main.ts
+var main_exports = {};
+__export(main_exports, {
+  parseProjectType: () => parseProjectType,
+  resolveIgnorePatterns: () => resolveIgnorePatterns
+});
+module.exports = __toCommonJS(main_exports);
 var import_promises2 = require("node:fs/promises");
 var import_node_path2 = require("node:path");
 var core = __toESM(require_core(), 1);
@@ -22227,35 +22238,62 @@ function defaultDescription() {
   const runNumber = process.env["GITHUB_RUN_NUMBER"] ?? "0";
   return `ci-${sha}-${runNumber}`;
 }
+function parseBooleanInput(name) {
+  try {
+    return core.getBooleanInput(name);
+  } catch (error) {
+    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
+      cause: error,
+      nextSteps: [
+        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
+        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
+}
 async function resolveIgnorePatterns(rootDir, rawInput) {
   const fromInput = parseClaspIgnore(rawInput);
   if (fromInput.length > 0) {
     return fromInput;
   }
   try {
-    const content = await (0, import_promises2.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8");
-    return parseClaspIgnore(content);
-  } catch {
-    return DEFAULT_IGNORE;
+    return parseClaspIgnore(await (0, import_promises2.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return DEFAULT_IGNORE;
+    }
+    throw new GasDeployError(".claspignore \u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", {
+      cause: error,
+      nextSteps: [
+        ".claspignore \u306E\u30D1\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+        ".claspignore \u304C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306B\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+        "\u610F\u56F3\u7684\u306B\u9664\u5916\u8A2D\u5B9A\u3092\u4F7F\u308F\u306A\u3044\u5834\u5408\u306F\u3001.claspignore \u3092\u524A\u9664\u3059\u308B\u304B ignore \u5165\u529B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
   }
 }
 async function run() {
+  const rootDir = core.getInput("root-dir") || ".";
+  const scriptId = core.getInput("script-id", { required: true });
+  const deploymentId = core.getInput("deployment-id");
+  const descriptionInput = core.getInput("description");
+  const projectType = parseProjectType(core.getInput("project-type") || "standalone");
+  const dryRun = parseBooleanInput("dry-run");
+  const createVersion = parseBooleanInput("create-version");
+  const ignore = await resolveIgnorePatterns(rootDir, core.getInput("ignore"));
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
   const accessToken = await getAccessToken(credentials);
   core.setSecret(accessToken);
-  const rootDir = core.getInput("root-dir") || ".";
-  const deploymentId = core.getInput("deployment-id");
-  const descriptionInput = core.getInput("description");
   const result = await deploy(new AppsScriptClient(accessToken), {
-    scriptId: core.getInput("script-id", { required: true }),
+    scriptId,
     rootDir,
-    ignore: await resolveIgnorePatterns(rootDir, core.getInput("ignore")),
+    ignore,
     ...deploymentId ? { deploymentId } : {},
-    projectType: parseProjectType(core.getInput("project-type") || "standalone"),
-    dryRun: core.getBooleanInput("dry-run"),
-    createVersion: core.getBooleanInput("create-version"),
+    projectType,
+    dryRun,
+    createVersion,
     description: descriptionInput || defaultDescription()
   });
   for (const warning2 of result.warnings) {
@@ -22275,4 +22313,9 @@ void run().catch((error) => {
   } else {
     core.setFailed(error instanceof Error ? error.message : String(error));
   }
+});
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  parseProjectType,
+  resolveIgnorePatterns
 });
