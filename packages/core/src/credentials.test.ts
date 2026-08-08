@@ -75,6 +75,63 @@ describe('parseCredentials', () => {
     expect(err!.cause).toBeUndefined();
   });
 
+  it('prefers the default account when the file holds several', () => {
+    const raw = JSON.stringify({
+      tokens: {
+        cyberagent: {
+          client_id: 'wrong-id',
+          client_secret: 'wrong-secret',
+          refresh_token: 'wrong-refresh',
+        },
+        default: {
+          client_id: 'cid.apps.googleusercontent.com',
+          client_secret: 'secret-value',
+          refresh_token: 'refresh-value',
+        },
+      },
+    });
+    expect(parseCredentials(raw)).toEqual(EXPECTED);
+  });
+
+  it('refuses to guess when several accounts exist and none is default', () => {
+    const raw = JSON.stringify({
+      tokens: {
+        alice: { client_id: 'a', client_secret: 'b', refresh_token: 'c' },
+        bob: { client_id: 'd', client_secret: 'e', refresh_token: 'f' },
+      },
+    });
+    const err = (() => {
+      try {
+        parseCredentials(raw);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.join('\n')).toContain('alice');
+    expect(err!.nextSteps.join('\n')).toContain('bob');
+  });
+
+  it('masks email-shaped account keys in the ambiguity error', () => {
+    const raw = JSON.stringify({
+      tokens: {
+        'someone@example.com': { client_id: 'a', client_secret: 'b', refresh_token: 'c' },
+        'other@example.com': { client_id: 'd', client_secret: 'e', refresh_token: 'f' },
+      },
+    });
+    const err = (() => {
+      try {
+        parseCredentials(raw);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err!.nextSteps.join('\n')).not.toContain('example.com');
+    expect(err!.nextSteps.join('\n')).toContain('<メールアドレス>');
+  });
+
   it('lists the supported shapes when nothing matches', () => {
     const err = (() => {
       try {

@@ -34,15 +34,21 @@ function extractClaspV2(value: unknown): Credentials | undefined {
   return { clientId, clientSecret, refreshToken };
 }
 
-function extract(value: unknown, depth: number): Credentials | undefined {
+interface Candidate {
+  key: string;
+  credentials: Credentials;
+}
+
+function collect(value: unknown, depth: number, key: string, out: Candidate[]): void {
   const direct = extractSnakeCase(value) ?? extractClaspV2(value);
-  if (direct) return direct;
-  if (depth >= MAX_NESTING_DEPTH || !isRecord(value)) return undefined;
-  for (const child of Object.values(value)) {
-    const found = extract(child, depth + 1);
-    if (found) return found;
+  if (direct) {
+    out.push({ key, credentials: direct });
+    return; // 一致した枝はそれ以上掘らない
   }
-  return undefined;
+  if (depth >= MAX_NESTING_DEPTH || !isRecord(value)) return;
+  for (const [childKey, child] of Object.entries(value)) {
+    collect(child, depth + 1, childKey, out);
+  }
 }
 
 const UNSUPPORTED_SHAPE_STEPS = [
@@ -51,6 +57,17 @@ const UNSUPPORTED_SHAPE_STEPS = [
   '最小形式: {"client_id": "...", "client_secret": "...", "refresh_token": "..."}',
   '上記のいずれでもない場合は、認証情報を再発行してください',
 ];
+
+const PREFERRED_ACCOUNT_KEY = 'default';
+
+/**
+ * アカウントを識別しうるキー名（"@" を含む＝メールアドレスらしい場合）を伏せる。
+ * clasp v3 の .clasprc.json はユーザーのメールアドレスをキーにしてトークンをネストしうるため、
+ * このキー名をそのままエラーメッセージに含めると CI ログに個人情報が漏れる。
+ */
+function maskAccountKey(key: string): string {
+  return key.includes('@') ? '<メールアドレス>' : key;
+}
 
 export function parseCredentials(raw: string): Credentials {
   let json: unknown;
@@ -67,11 +84,29 @@ export function parseCredentials(raw: string): Credentials {
     });
   }
 
-  const credentials = extract(json, 0);
-  if (!credentials) {
+  const candidates: Candidate[] = [];
+  collect(json, 0, '', candidates);
+
+  if (candidates.length === 0) {
     throw new GasDeployError('credentials の形式を認識できませんでした', {
       nextSteps: ['対応している形式は次の通りです:', ...UNSUPPORTED_SHAPE_STEPS],
     });
   }
-  return credentials;
+
+  if (candidates.length === 1) {
+    return candidates[0]!.credentials;
+  }
+
+  const preferred = candidates.find((candidate) => candidate.key === PREFERRED_ACCOUNT_KEY);
+  if (preferred) {
+    return preferred.credentials;
+  }
+
+  throw new GasDeployError('credentials に複数のアカウントが含まれており、どれを使うか判断できません', {
+    nextSteps: [
+      `見つかったアカウント: ${candidates.map((candidate) => maskAccountKey(candidate.key)).join(', ')}`,
+      'clasp が既定で使うアカウント（default）が含まれていません',
+      '使いたいアカウントの認証情報だけを含む JSON を GitHub Secrets に登録してください',
+    ],
+  });
 }
