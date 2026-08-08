@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: <owner>/gas-deploy-actions/deploy@v0.1.0
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
         with:
           credentials: ${{ secrets.CLASPRC_JSON }}
           script-id: ${{ secrets.GAS_SCRIPT_ID }}
