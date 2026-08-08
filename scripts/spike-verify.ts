@@ -16,6 +16,10 @@
  *   このスクリプトはアクセストークン・リフレッシュトークン・クライアントシークレット・
  *   ファイルの source 本文を一切 console.log しない。[7] は .clasprc.json の構造を
  *   調べるためにキー名と値の「型」のみを出力し、値そのもの（文字列・数値）は出力しない。
+ *   さらに [7] は "@" を含むキー名（アカウントのメールアドレスである可能性が高い）を
+ *   `<メールアドレス>` に置き換えてから出力する（maskKeyName）。ただしこれはヒューリスティック
+ *   であり、メールアドレス以外の形式の個人識別子までは伏せられない。この出力は将来
+ *   公開リポジトリにコミットされる想定のため、貼り付ける前に必ず人間が目視で確認すること。
  */
 import { parseCredentials } from '../packages/core/src/credentials.ts';
 import { getAccessToken } from '../packages/core/src/auth.ts';
@@ -74,7 +78,18 @@ function describeType(value: unknown): string {
 }
 
 /**
+ * キー名がアカウントを識別しうる場合（"@" を含む＝メールアドレスらしい場合）に伏せる。
+ * clasp v3 の .clasprc.json はユーザーのメールアドレスをキーにしてトークンをネストしうるため、
+ * このキー名をそのまま出力すると個人情報が漏れる。それ以外のキー名はそのまま返す
+ * （これはヒューリスティックであり、メールアドレス以外の識別子までは検出できない）。
+ */
+function maskKeyName(key: string): string {
+  return key.includes('@') ? '<メールアドレス>' : key;
+}
+
+/**
  * オブジェクトのキー名と、各値の型のみを出力する。値そのものは一切 console.log しない。
+ * キー名は maskKeyName でメールアドレスらしきものを伏せてから出力する。
  * maxDepth で再帰の深さを制限する（トップレベルと、その1階層下まで）。
  */
 function printKeyNamesOnly(value: unknown, indent: string, remainingDepth: number): void {
@@ -82,7 +97,7 @@ function printKeyNamesOnly(value: unknown, indent: string, remainingDepth: numbe
     return;
   }
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    console.log(`${indent}${key}: ${describeType(child)}`);
+    console.log(`${indent}${maskKeyName(key)}: ${describeType(child)}`);
     if (remainingDepth > 0 && typeof child === 'object' && child !== null && !Array.isArray(child)) {
       printKeyNamesOnly(child, `${indent}  `, remainingDepth - 1);
     }
