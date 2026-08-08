@@ -1,10 +1,13 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, relative, sep } from 'node:path';
 import { GasDeployError } from './errors.js';
 import { createIgnoreFilter } from './ignore.js';
 import type { FileType, ScriptFile } from './types.js';
 
 const MANIFEST_NAME = 'appsscript';
+
+/** 1ファイルあたりの上限。Apps Script の実際の上限より十分大きく、事故だけを捕まえる値。 */
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const EXTENSION_TO_TYPE: Record<string, FileType> = {
   '.js': 'SERVER_JS',
@@ -25,6 +28,18 @@ async function walk(dir: string, root: string, out: string[]): Promise<void> {
       await walk(full, root, out);
     } else if (entry.isFile()) {
       out.push(toPosix(relative(root, full)));
+    } else if (entry.isSymbolicLink()) {
+      // clasp はファイルへのシンボリックリンクを push するが、ディレクトリへのリンクは辿らない。
+      // 実測で確認済み。ディレクトリを辿らないことが循環参照の防波堤にもなっている。
+      let target;
+      try {
+        target = await stat(full);
+      } catch {
+        continue; // リンク切れ。読めないので収集対象から外す
+      }
+      if (target.isFile()) {
+        out.push(toPosix(relative(root, full)));
+      }
     }
   }
 }
@@ -51,6 +66,17 @@ export async function collectFiles(rootDir: string, ignorePatterns: readonly str
 
     // Apps Script が保持できる JSON はマニフェストのみ。
     if (type === 'JSON' && name !== MANIFEST_NAME) continue;
+
+    const stats = await stat(join(rootDir, relativePath));
+    if (stats.size > MAX_FILE_BYTES) {
+      throw new GasDeployError(`${relativePath} が大きすぎます (${stats.size} バイト、上限 ${MAX_FILE_BYTES} バイト)`, {
+        nextSteps: [
+          'root-dir がビルド成果物ではなくソースツリー全体を指していないか確認してください',
+          '意図しないファイルが含まれている場合は .claspignore で除外してください',
+          'Apps Script のファイルは通常このサイズになりません。バンドル出力の設定を見直してください',
+        ],
+      });
+    }
 
     const source = await readFile(join(rootDir, relativePath), 'utf8');
     files.push({ name, type, source });

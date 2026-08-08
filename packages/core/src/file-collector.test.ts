@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { collectFiles } from './file-collector.js';
+import { collectFiles, MAX_FILE_BYTES } from './file-collector.js';
 import { GasDeployError } from './errors.js';
 
 const MANIFEST = JSON.stringify({ timeZone: 'Asia/Tokyo', exceptionLogging: 'STACKDRIVER' });
@@ -110,5 +110,46 @@ describe('collectFiles', () => {
     const files = await collectFiles(root, []);
 
     expect(files).toContainEqual({ name: 'app.js', type: 'HTML', source: '<script></script>' });
+  });
+
+  it('collects a symlink pointing at a file, as clasp does', async () => {
+    const root = await makeProject({
+      'appsscript.json': MANIFEST,
+      'Code.js': 'function main() {}',
+    });
+    await symlink('Code.js', join(root, 'Linked.js'));
+
+    const files = await collectFiles(root, []);
+
+    expect(files.map((f) => f.name)).toContain('Linked');
+  });
+
+  it('does not traverse a symlink pointing at a directory, as clasp does', async () => {
+    const root = await makeProject({
+      'appsscript.json': MANIFEST,
+      'ui/Sidebar.html': '<div></div>',
+    });
+    await symlink('ui', join(root, 'LinkedDir'));
+
+    const files = await collectFiles(root, []);
+
+    expect(files.map((f) => f.name)).toEqual(['appsscript', 'ui/Sidebar']);
+  });
+
+  it('skips a broken symlink instead of throwing', async () => {
+    const root = await makeProject({ 'appsscript.json': MANIFEST });
+    await symlink('does-not-exist.js', join(root, 'Broken.js'));
+
+    await expect(collectFiles(root, [])).resolves.toHaveLength(1);
+  });
+
+  it('fails with a guided error when a file exceeds the size limit', async () => {
+    const root = await makeProject({ 'appsscript.json': MANIFEST });
+    await writeFile(join(root, 'Huge.js'), 'x'.repeat(MAX_FILE_BYTES + 1), 'utf8');
+
+    const err = await collectFiles(root, []).catch((e: GasDeployError) => e);
+
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect((err as GasDeployError).nextSteps.length).toBeGreaterThan(0);
   });
 });
