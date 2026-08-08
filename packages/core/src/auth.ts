@@ -23,6 +23,20 @@ const PARSE_FAILURE_NEXT_STEPS = [
 ];
 
 /**
+ * 要求するスコープ。リフレッシュ交換時に明示的に指定して絞り込む。
+ *
+ * 指定しないと、リフレッシュトークンに元々付与された全スコープがそのまま返る
+ * （RFC 6749 §6）。clasp の認証情報は cloud-platform を含む13スコープを持つため、
+ * 指定を省略すると本 Action が扱うトークンの権限が不必要に広くなる。
+ * この2つで getContent / updateContent / versions.create / deployments.create の
+ * すべてが動作することは実測で確認済み。
+ */
+export const REQUESTED_SCOPES = [
+  'https://www.googleapis.com/auth/script.projects',
+  'https://www.googleapis.com/auth/script.deployments',
+].join(' ');
+
+/**
  * refresh token を access token に交換する。
  * credentials に access token が含まれていても使わず、常に新規取得する。
  */
@@ -35,6 +49,7 @@ export async function getAccessToken(
     client_secret: credentials.clientSecret,
     refresh_token: credentials.refreshToken,
     grant_type: 'refresh_token',
+    scope: REQUESTED_SCOPES,
   });
 
   let response: Response;

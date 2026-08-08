@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getAccessToken } from './auth.js';
+import { REQUESTED_SCOPES, getAccessToken } from './auth.js';
 import { GasDeployError } from './errors.js';
 
 const CREDENTIALS = {
@@ -116,6 +116,20 @@ describe('getAccessToken', () => {
     })();
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('プロキシ');
+  });
+
+  it('narrows the granted scope to only what this action needs', async () => {
+    const fetchImpl = stubFetch(200, JSON.stringify({ access_token: 'at-123' }));
+    await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const params = init.body as URLSearchParams;
+    expect(params.get('scope')).toBe(REQUESTED_SCOPES);
+  });
+
+  it('requests neither cloud-platform nor any drive scope', () => {
+    expect(REQUESTED_SCOPES).not.toContain('cloud-platform');
+    expect(REQUESTED_SCOPES).not.toContain('drive');
   });
 
   it('mentions the reauth policy when Google reports invalid_rapt', async () => {
