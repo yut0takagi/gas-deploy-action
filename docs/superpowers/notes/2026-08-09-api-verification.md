@@ -138,6 +138,21 @@ tokens: object
 
 実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
 
+## ファイル名の衝突（実測）
+
+`Code.js` と `Code.gs` を同居させると、どちらも Apps Script 上では name=`Code` / type=`SERVER_JS` になる。clasp v3.3.0 の挙動:
+
+```
+$ clasp push -f
+Conflicting files found
+```
+
+**push 全体を拒否し、リモートは一切変更されない。** `clasp status --json` もエラーになり出力を返さない。
+
+当初の本実装は黙って重複エントリを生成しており、そのまま `updateContent` に渡すと正体不明の API エラーになるところだった。clasp に合わせて**収集時点で明示的に失敗**させるよう修正済み。`.gs` から `.js` への移行途中で古いファイルが残るという現実的なケースで踏む。
+
+---
+
 ## シンボリックリンクの扱い（実測）
 
 fixture にファイルへのリンクとディレクトリへのリンクを作り、`clasp status --json` で判定させた。
