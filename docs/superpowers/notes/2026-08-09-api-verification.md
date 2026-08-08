@@ -117,6 +117,29 @@ tokens: object
 
 ---
 
+## `.claspignore` のパターン解釈（実測）
+
+`.claspignore` の内容を書き換えながら `clasp status --json` を実行し、clasp v3.3.0 自身がどう解釈するかを実測した。fixture には `Code.js` / `Legacy.gs` / `app.js.html` / `ui/Sidebar.html` / `nested/secrets.js` / `build/out.js` / `Code.test.js` / `ignored.txt` を配置。
+
+| パターン | clasp は除外したか | 本実装 |
+|---|---|---|
+| `/Code.js` | **いいえ**（`Code.js` は push された） | 一致（空振り） |
+| `build/` | **いいえ**（`build/out.js` は push された） | 一致（空振り） |
+| `ui/` | **いいえ**（`ui/Sidebar.html` は push された） | 一致（空振り） |
+| `secrets.js` | **いいえ**（`nested/secrets.js` は push された） | 一致（ルートのみ対象） |
+| `**/secrets.js` | **はい** | 一致 |
+| `Code.js` | **はい**（ルートの `Code.js`） | 一致 |
+
+**結論: 本実装は clasp と完全に一致している。**
+
+**重要**: `.claspignore` は **gitignore ではなく glob マッチ**である。gitignore の常識で書いた `/foo`（ルート限定）や `build/`（ディレクトリ指定）は **エラーにもならず、ただ何も除外しない**。ディレクトリを除外するには `build/**`、階層を問わずファイル名で除外するには `**/secrets.js` と書く必要がある。
+
+これは利用者が「テストファイルを除外したつもりが、そのままデプロイされていた」という事故を起こしうる罠なので、**README に明記すること**（Task 14）。挙動を gitignore 寄りに「修正」してはならない。clasp 互換が壊れる。
+
+実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
+
+---
+
 ## clasp 互換テストに関する発見（Task 13 への影響）
 
 clasp v3 には **`clasp status --json`** がある。push 対象のファイル判定を機械可読な形で取得できる。
