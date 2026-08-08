@@ -7,3 +7,4 @@ export * from './auth.js';
 export * from './ignore.js';
 export * from './file-collector.js';
 export * from './differ.js';
+export * from './api-client.js';
