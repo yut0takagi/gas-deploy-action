@@ -61,6 +61,20 @@ describe('parseCredentials', () => {
     expect(() => parseCredentials('not json')).toThrowError(GasDeployError);
   });
 
+  it('does not carry the malformed input into the error cause', () => {
+    const secret = 'SUPER-SECRET-NOT-JSON';
+    const err = (() => {
+      try {
+        parseCredentials(secret);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.cause).toBeUndefined();
+  });
+
   it('lists the supported shapes when nothing matches', () => {
     const err = (() => {
       try {

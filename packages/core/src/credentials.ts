@@ -56,9 +56,10 @@ export function parseCredentials(raw: string): Credentials {
   let json: unknown;
   try {
     json = JSON.parse(raw);
-  } catch (cause) {
+  } catch {
+    // SyntaxError のメッセージは入力の先頭断片をそのまま含む。credentials は秘密情報そのものなので
+    // cause には載せない。診断に必要な情報は nextSteps で伝える。
     throw new GasDeployError('credentials の JSON を解析できませんでした', {
-      cause,
       nextSteps: [
         'GitHub Secrets に登録した値が JSON 全体になっているか確認してください',
         'ファイルの内容を貼り付ける際に前後の空白や改行が混入していないか確認してください',
