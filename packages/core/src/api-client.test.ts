@@ -186,3 +186,106 @@ describe('AppsScriptClient.listDeployments', () => {
     expect(deployments.filter((d) => d.versionNumber !== undefined)).toHaveLength(1);
   });
 });
+
+describe('AppsScriptClient connectivity and parsing failures', () => {
+  it('retries a connection failure (fetch rejects) and succeeds', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new TypeError('fetch failed');
+      }
+      return new Response(JSON.stringify({ files: [] }), { status: 200 });
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+
+    await expect(client.getContent(SCRIPT_ID)).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after the retry budget on repeated connection failures and throws a GasDeployError', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+
+    await expect(client.getContent(SCRIPT_ID)).rejects.toThrowError(GasDeployError);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+
+  it('treats a response body read failure as a retryable connectivity error', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return { text: () => Promise.reject(new Error('stream reset')) } as unknown as Response;
+      }
+      return new Response('{}', { status: 200 });
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+
+    await expect(client.getContent(SCRIPT_ID)).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws without leaking the response body when a 200 response is not valid JSON', async () => {
+    const { client } = clientWith([{ status: 200, body: 'not-json{' }]);
+
+    const error = (await client.getContent(SCRIPT_ID).catch((e: unknown) => e)) as GasDeployError;
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect(error.cause).toBeUndefined();
+    expect(error.nextSteps.join(' ')).toContain('プロキシ');
+  });
+});
+
+describe('AppsScriptClient POST retry safety', () => {
+  it('does not retry a 500 on POST and warns that a partial write may have happened', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 500, body: 'boom' }]);
+
+    const error = (await client.createVersion(SCRIPT_ID, 'desc').catch((e: unknown) => e)) as GasDeployError;
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(error.nextSteps.some((step) => step.includes('デプロイ'))).toBe(true);
+  });
+
+  it('retries a 429 on POST', async () => {
+    const { client, fetchImpl } = clientWith([
+      { status: 429, body: 'rate limited' },
+      { status: 200, body: JSON.stringify({ versionNumber: 3 }) },
+    ]);
+
+    await expect(client.createVersion(SCRIPT_ID, 'desc')).resolves.toBe(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('still retries a 500 on PUT', async () => {
+    const { client, fetchImpl } = clientWith([
+      { status: 500, body: 'boom' },
+      { status: 200, body: '{}' },
+    ]);
+
+    await client.updateContent(SCRIPT_ID, []);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AppsScriptClient path encoding', () => {
+  it('encodes a scriptId containing a slash instead of adding a path segment', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 200, body: '{}' }]);
+    await client.getContent('script/with/slash');
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://script.googleapis.com/v1/projects/script%2Fwith%2Fslash/content');
+  });
+
+  it('encodes a deploymentId containing a slash', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 200, body: '{}' }]);
+    await client.updateDeployment(SCRIPT_ID, 'dep/1', 7, 'desc');
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://script.googleapis.com/v1/projects/script-abc/deployments/dep%2F1');
+  });
+});
