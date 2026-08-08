@@ -50,6 +50,33 @@ describe('createIgnoreFilter', () => {
     expect(isIgnored('Code.test.js')).toBe(true);
     expect(isIgnored('ignored.txt')).toBe(true);
   });
+
+  // 以下は実際の clasp v3.3.0 の挙動を実測して固定したもの。
+  // clasp は glob マッチであって gitignore セマンティクスではないため、
+  // 利用者の直感に反する挙動が含まれる。ここを「直す」と clasp 互換が壊れる。
+
+  it('replicates clasp: a leading-slash pattern matches nothing', () => {
+    const isIgnored = createIgnoreFilter(['/Code.js']);
+    expect(isIgnored('Code.js')).toBe(false);
+    expect(isIgnored('sub/Code.js')).toBe(false);
+  });
+
+  it('replicates clasp: a trailing-slash directory pattern matches nothing', () => {
+    const isIgnored = createIgnoreFilter(['build/']);
+    expect(isIgnored('build/out.js')).toBe(false);
+  });
+
+  it('replicates clasp: a bare filename matches at the root but not in a subdirectory', () => {
+    const isIgnored = createIgnoreFilter(['secrets.js']);
+    expect(isIgnored('secrets.js')).toBe(true);
+    expect(isIgnored('nested/secrets.js')).toBe(false);
+  });
+
+  it('replicates clasp: a **/ prefix matches at any depth', () => {
+    const isIgnored = createIgnoreFilter(['**/secrets.js']);
+    expect(isIgnored('secrets.js')).toBe(true);
+    expect(isIgnored('nested/secrets.js')).toBe(true);
+  });
 });
 
 describe('parseClaspIgnore', () => {
