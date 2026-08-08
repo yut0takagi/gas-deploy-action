@@ -782,6 +782,19 @@ git add packages/core/src/auth.ts packages/core/src/auth.test.ts packages/core/s
 git commit -m "feat(core): refresh token からアクセストークンを取得する処理を追加"
 ```
 
+> **実装時の変更（コミット b9a18ff / 7641474 / bd72e6d）**
+>
+> レビューで、上記のコード片には「エラーは必ず案内付きにする」という原則を裏切る経路が複数見つかったため、実装は以下の点で上のコード片と異なる。**正は実装側**。
+>
+> 1. **`fetchImpl` の呼び出しを try/catch で包む** — DNS 失敗・接続拒否・タイムアウトで undici が投げる生の `TypeError: fetch failed` が素通りしていた。新設した `CONNECTIVITY_NEXT_STEPS` を案内に使う。`cause` は保持する（トランスポート層の情報のみで credentials を含まないため）
+> 2. **`response.text()` も try/catch で包む** — 本文読み取り中に接続が切れると生の `TypeError: terminated` が素通りしていた。案内は `CONNECTIVITY_NEXT_STEPS` を再利用
+> 3. **`JSON.parse` の結果を `unknown` で受け、実行時に絞り込む** — `JSON.parse('null')` は例外を投げずに `null` を返すため、続く `parsed.access_token` で**生の `TypeError`** が発生していた。`typeof parsed === 'object' && parsed !== null` で絞り込んだうえ、`access_token` が非空文字列であることも検証する（数値が返った場合に「トークン」として通していた穴も塞がる）
+> 4. **`cause` の扱い** — `JSON.parse` 失敗時と `access_token` 欠落時は `cause` を付けない。前者は `SyntaxError` が解析対象の断片を含み、後者の 200 応答は `id_token` などのトークン素材を含みうるため
+> 5. **パース失敗時にも案内を付ける** — `PARSE_FAILURE_NEXT_STEPS` を新設。プロキシの HTML エラーページや空応答がここに落ちる
+> 6. **テストの `.catch((e: GasDeployError) => e)` を async IIFE + try/catch に置換** — `Promise.catch` の型定義上 `string | GasDeployError` に広がり `tsc` が通らない。`credentials.test.ts` と同じパターンに揃えた。アサーションは不変
+>
+> テストは4件から8件に増えている（`client_secret` の送信検証、非オブジェクト応答、ネットワーク失敗、本文読み取り失敗）。
+
 ---
 
 ## Task 5: 未確定事項の検証スパイク（手動実行）
@@ -805,7 +818,7 @@ git commit -m "feat(core): refresh token からアクセストークンを取得
  * 実行方法:
  *   export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
  *   export GAS_SCRIPT_ID="<検証用スクリプトの scriptId>"
- *   node --experimental-strip-types scripts/spike-verify.ts
+ *   npm run spike
  */
 import { parseCredentials } from '../packages/core/src/credentials.ts';
 import { getAccessToken } from '../packages/core/src/auth.ts';
@@ -860,10 +873,16 @@ console.log(`[6] 現在のデプロイ数: ${(deployments.deployments ?? []).len
 ```bash
 export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
 export GAS_SCRIPT_ID="<scriptId>"
-node --experimental-strip-types scripts/spike-verify.ts
+npm run spike
 ```
 
-Expected: `[1]` から `[6]` まですべて出力される
+> 補足: `node --experimental-strip-types scripts/spike-verify.ts` は使えないことを実測済み。
+> Node の type stripping は import 指定子を書き換えないため、`credentials.ts` が内部で
+> import する `./errors.js`（実体は `errors.ts`）を解決できず `ERR_MODULE_NOT_FOUND` になる
+>（Node v24.13.1 で確認）。そのため `npm run spike`（esbuild でバンドルしてから実行する
+> package.json のスクリプト）を使う。
+
+Expected: `[1]` から `[7]` まですべて出力される
 
 - [ ] **Step 4: OAuth 同意画面の状態を確認（未確定 #3）**
 
@@ -2660,7 +2679,7 @@ clasp と認証済みの Google アカウント、および使い捨ての GAS �
    ```bash
    export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
    export GAS_SCRIPT_ID="<使い捨てプロジェクトの scriptId>"
-   node --experimental-strip-types ../../scripts/spike-verify.ts
+   (cd ../../ && npm run spike)
    ```
 
 5. `[4] getContent` の出力の name / type を `sample-project.expected.json` に反映する
