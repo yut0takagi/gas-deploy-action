@@ -138,6 +138,30 @@ tokens: object
 
 実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
 
+## 本実装による実 API での通し確認（E2E）
+
+`packages/core` の `deploy()` を、検証専用プロジェクトに対して実際に実行した。**clasp を介さず、我々自身の書き込み経路を通した唯一の確認**である。
+
+ローカルの `Code.js` に日本語コメントを含む変更を加えてから実行した結果:
+
+```
+[1] dry-run: changed=true modified=["Code"]
+[2] 本実行: changed=true version=2 deployment=AKfycbwpjCDCWR...
+[3] 再取得して差分: 差分ゼロ（収束した）
+[4] 日本語コメントの保存: 一致（Unicode 正規化の問題なし）
+[5] もう一度 dry-run: changed=false ← スキップされる
+[6] デプロイ一覧: 全 2 件 / バージョン付き 1 件
+```
+
+確認できたこと:
+
+- `updateContent` → `versions.create` → `deployments.create` の書き込み経路が実 API で動く
+- **我々が書き込んだ内容を取得し直すと差分ゼロに収束する**。skip-when-unchanged の前提が、clasp 経由ではなく本実装自身で成立する
+- **非 ASCII 文字（日本語）が往復しても壊れない。** differ のレビューで「未測定」として残っていた Unicode 正規化形（NFC/NFD）の懸念が解消された。日本語のコメントや文字列リテラルは対象利用者に頻出するため、ここが壊れていれば差分は永久に収束しなかった
+- `listDeployments` が `@HEAD` を含む全2件を返し、そのうちバージョン付きは1件と正しく判別される。`pageSize` 修正と `@HEAD` 除外の両方が実環境で機能している
+
+---
+
 ## 内容の往復一致（実測）— skip-when-unchanged の前提
 
 差分ゼロならデプロイをスキップする機能は、「push した内容を取得し直したら差分が出ない」ことに依存する。ここが崩れると**毎回バージョン番号とデプロイ枠を消費し続ける**（上限20なのでいずれ詰まる）。最大の懸念は `appsscript.json` が API 側の JSON シリアライザで再整形されることだった。
