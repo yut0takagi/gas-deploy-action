@@ -138,6 +138,28 @@ tokens: object
 
 実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
 
+## 内容の往復一致（実測）— skip-when-unchanged の前提
+
+差分ゼロならデプロイをスキップする機能は、「push した内容を取得し直したら差分が出ない」ことに依存する。ここが崩れると**毎回バージョン番号とデプロイ枠を消費し続ける**（上限20なのでいずれ詰まる）。最大の懸念は `appsscript.json` が API 側の JSON シリアライザで再整形されることだった。
+
+fixture を push したのち `getContent` で取得し、`normalizeSource`（CRLF→LF、末尾改行の正規化）適用後に比較した結果:
+
+```
+一致   app.js.html        local=46B remote=46B  BOM(remote)=なし
+一致   appsscript.json    local=125B remote=125B  BOM(remote)=なし
+一致   Code.js            local=43B remote=43B  BOM(remote)=なし
+一致   Legacy.gs          local=46B remote=46B  BOM(remote)=なし
+一致   ui/Sidebar.html    local=35B remote=35B  BOM(remote)=なし
+```
+
+**不一致 0 件。JSON の再整形なし、BOM 付与なし。** `normalizeSource` は現状のままで十分。
+
+**留保**: 今回 push したのは clasp なので、厳密には「clasp の正規化と本実装の正規化が一致している」ことの確認である。本実装の `updateContent` を使った往復は Task 14 の実地確認で押さえる。ただし「API が JSON を勝手に再整形する」という最悪のシナリオは否定できた。
+
+**未測定**: 非 ASCII 文字を含むファイルの Unicode 正規化形（NFC/NFD）の保存。日本語のコメントや文字列リテラルは現実的に頻出するため、Task 14 で fixture に含めて確認すること。
+
+---
+
 ## ファイル名の衝突（実測）
 
 `Code.js` と `Code.gs` を同居させると、どちらも Apps Script 上では name=`Code` / type=`SERVER_JS` になる。clasp v3.3.0 の挙動:
