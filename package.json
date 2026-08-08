@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --build",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "spike": "esbuild scripts/spike-verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/spike-verify.mjs && node node_modules/.cache/spike-verify.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
