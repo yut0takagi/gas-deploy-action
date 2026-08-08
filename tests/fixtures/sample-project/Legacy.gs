@@ -1,0 +1,3 @@
+function legacyFunction() {
+  return 'legacy';
+}

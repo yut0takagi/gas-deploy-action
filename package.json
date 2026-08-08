@@ -1,0 +1,22 @@
+{
+  "name": "gas-deploy-actions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "deploy"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --build",
+    "build": "node scripts/build.mjs",
+    "spike": "esbuild scripts/spike-verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/spike-verify.mjs && node node_modules/.cache/spike-verify.mjs"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.3.0",
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

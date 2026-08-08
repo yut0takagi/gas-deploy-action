@@ -507,6 +507,20 @@ describe('parseCredentials', () => {
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('.clasprc.json');
   });
+
+  it('does not carry the malformed input into the error cause', () => {
+    const secret = 'SUPER-SECRET-NOT-JSON';
+    const err = (() => {
+      try {
+        parseCredentials(secret);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.cause).toBeUndefined();
+  });
 });
 ```
 
@@ -576,9 +590,10 @@ export function parseCredentials(raw: string): Credentials {
   let json: unknown;
   try {
     json = JSON.parse(raw);
-  } catch (cause) {
+  } catch {
+    // SyntaxError のメッセージは入力の先頭断片をそのまま含む。credentials は秘密情報そのものなので
+    // cause には載せない。診断に必要な情報は nextSteps で伝える。
     throw new GasDeployError('credentials の JSON を解析できませんでした', {
-      cause,
       nextSteps: [
         'GitHub Secrets に登録した値が JSON 全体になっているか確認してください',
         'ファイルの内容を貼り付ける際に前後の空白や改行が混入していないか確認してください',
@@ -599,7 +614,7 @@ export function parseCredentials(raw: string): Credentials {
 - [ ] **Step 4: テストを実行して成功を確認**
 
 Run: `npx vitest run packages/core/src/credentials.test.ts`
-Expected: `6 passed`
+Expected: `7 passed`
 
 - [ ] **Step 5: `index.ts` に再エクスポートを追加**
 
@@ -767,6 +782,19 @@ git add packages/core/src/auth.ts packages/core/src/auth.test.ts packages/core/s
 git commit -m "feat(core): refresh token からアクセストークンを取得する処理を追加"
 ```
 
+> **実装時の変更（コミット b9a18ff / 7641474 / bd72e6d）**
+>
+> レビューで、上記のコード片には「エラーは必ず案内付きにする」という原則を裏切る経路が複数見つかったため、実装は以下の点で上のコード片と異なる。**正は実装側**。
+>
+> 1. **`fetchImpl` の呼び出しを try/catch で包む** — DNS 失敗・接続拒否・タイムアウトで undici が投げる生の `TypeError: fetch failed` が素通りしていた。新設した `CONNECTIVITY_NEXT_STEPS` を案内に使う。`cause` は保持する（トランスポート層の情報のみで credentials を含まないため）
+> 2. **`response.text()` も try/catch で包む** — 本文読み取り中に接続が切れると生の `TypeError: terminated` が素通りしていた。案内は `CONNECTIVITY_NEXT_STEPS` を再利用
+> 3. **`JSON.parse` の結果を `unknown` で受け、実行時に絞り込む** — `JSON.parse('null')` は例外を投げずに `null` を返すため、続く `parsed.access_token` で**生の `TypeError`** が発生していた。`typeof parsed === 'object' && parsed !== null` で絞り込んだうえ、`access_token` が非空文字列であることも検証する（数値が返った場合に「トークン」として通していた穴も塞がる）
+> 4. **`cause` の扱い** — `JSON.parse` 失敗時と `access_token` 欠落時は `cause` を付けない。前者は `SyntaxError` が解析対象の断片を含み、後者の 200 応答は `id_token` などのトークン素材を含みうるため
+> 5. **パース失敗時にも案内を付ける** — `PARSE_FAILURE_NEXT_STEPS` を新設。プロキシの HTML エラーページや空応答がここに落ちる
+> 6. **テストの `.catch((e: GasDeployError) => e)` を async IIFE + try/catch に置換** — `Promise.catch` の型定義上 `string | GasDeployError` に広がり `tsc` が通らない。`credentials.test.ts` と同じパターンに揃えた。アサーションは不変
+>
+> テストは4件から8件に増えている（`client_secret` の送信検証、非オブジェクト応答、ネットワーク失敗、本文読み取り失敗）。
+
 ---
 
 ## Task 5: 未確定事項の検証スパイク（手動実行）
@@ -790,7 +818,7 @@ git commit -m "feat(core): refresh token からアクセストークンを取得
  * 実行方法:
  *   export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
  *   export GAS_SCRIPT_ID="<検証用スクリプトの scriptId>"
- *   node --experimental-strip-types scripts/spike-verify.ts
+ *   npm run spike
  */
 import { parseCredentials } from '../packages/core/src/credentials.ts';
 import { getAccessToken } from '../packages/core/src/auth.ts';
@@ -845,10 +873,16 @@ console.log(`[6] 現在のデプロイ数: ${(deployments.deployments ?? []).len
 ```bash
 export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
 export GAS_SCRIPT_ID="<scriptId>"
-node --experimental-strip-types scripts/spike-verify.ts
+npm run spike
 ```
 
-Expected: `[1]` から `[6]` まですべて出力される
+> 補足: `node --experimental-strip-types scripts/spike-verify.ts` は使えないことを実測済み。
+> Node の type stripping は import 指定子を書き換えないため、`credentials.ts` が内部で
+> import する `./errors.js`（実体は `errors.ts`）を解決できず `ERR_MODULE_NOT_FOUND` になる
+>（Node v24.13.1 で確認）。そのため `npm run spike`（esbuild でバンドルしてから実行する
+> package.json のスクリプト）を使う。
+
+Expected: `[1]` から `[7]` まですべて出力される
 
 - [ ] **Step 4: OAuth 同意画面の状態を確認（未確定 #3）**
 
@@ -897,6 +931,17 @@ getContent が返した name 一覧:
 （spike-verify.ts の [4] の出力を貼り付け）
 
 判定: <"/" 区切りで表現できる / できない>
+
+## #6 .clasprc.json の複数ユーザー保持
+
+`~/.clasprc.json` のトップレベル構造（**値は伏せ、キー名だけ**を記録すること）:
+```
+（例: { "tokens": { "default": ... } } のようにキー名のみ）
+```
+
+複数ユーザーを保持しうる構造か: <はい / いいえ>
+
+判定: <現行の「最初に一致したものを採用」で問題ない / default 優先などの対応が必要>
 ```
 
 - [ ] **Step 6: 結果に応じてスペックを更新**
@@ -1047,6 +1092,27 @@ git commit -m "feat(core): .claspignore 互換の除外判定を追加"
 ---
 
 ## Task 7: file-collector
+
+> **実測で判明した追加のテストケース（Task 5 のスパイク）**
+>
+> 実在プロジェクトと検証用プロジェクトの両方で、**`app.js.html` が name=`app.js` / type=`HTML` として格納される**ことを確認した。HTML テンプレートに JS を埋め込む GAS の定番パターンである。
+>
+> 拡張子を1つだけ剥がす現在の実装で正しく一致するが、「`.js` で終わる名前が HTML 種別になる」という直感に反する挙動なので、**テストケースに含めること**。
+>
+> ```typescript
+>   it('strips only the final extension, so Foo.js.html becomes an HTML file named Foo.js', async () => {
+>     const root = await makeProject({
+>       'appsscript.json': MANIFEST,
+>       'app.js.html': '<script></script>',
+>     });
+>
+>     const files = await collectFiles(root, []);
+>
+>     expect(files).toContainEqual({ name: 'app.js', type: 'HTML', source: '<script></script>' });
+>   });
+> ```
+>
+> また、サブディレクトリが `/` 区切りで表現できることも実測で確定した（`ui/Sidebar`）。既存のテストの想定どおりで変更は不要。
 
 **Files:**
 - Create: `packages/core/src/file-collector.ts`
@@ -1441,6 +1507,32 @@ git commit -m "feat(core): 改行正規化つきの差分計算を追加"
 
 リトライをここに閉じ込めることで、`deployer` はリトライを知らずに済む。
 
+> **⚠️ 実測に基づく必須の修正（Task 5 のスパイクで判明）**
+>
+> 下記 Step 3 の `listDeployments` は**そのままでは壊れている**。`deployments.list` は `pageSize` を指定しないと **1件しか返さない**（21件ある状態で実測）。この実装では常に1を返し、Task 10 の警告が永久に発火しない。
+>
+> `listDeployments` を次の形にすること。定数 `DEPLOYMENTS_PAGE_SIZE = 50` を他の定数と並べて定義する。
+>
+> ```typescript
+>   async listDeployments(scriptId: string): Promise<Deployment[]> {
+>     const all: RawDeployment[] = [];
+>     let pageToken: string | undefined;
+>     do {
+>       const query = new URLSearchParams({ pageSize: String(DEPLOYMENTS_PAGE_SIZE) });
+>       if (pageToken) query.set('pageToken', pageToken);
+>       const result = (await this.request('GET', `/projects/${scriptId}/deployments?${query}`)) as {
+>         deployments?: RawDeployment[];
+>         nextPageToken?: string;
+>       };
+>       all.push(...(result.deployments ?? []));
+>       pageToken = result.nextPageToken;
+>     } while (pageToken);
+>     return all.map(toDeployment);
+>   }
+> ```
+>
+> テストも合わせて追加すること。(a) `pageSize` がクエリに載ること、(b) `nextPageToken` が返ったら2ページ目を取得して結合すること。既存の「lists deployments」テストは URL にクエリが付くようになるため期待値の更新が必要。
+
 > **スペックからの意図的な逸脱:** スペック §8 では MSW を使うと記述したが、`fetch` を引数で差し替える設計にしたため、スタブ関数で同等の検証ができる。依存を1つ減らすため MSW は導入しない。
 
 **Files:**
@@ -1775,6 +1867,23 @@ git commit -m "feat(core): リトライ込みの Apps Script API クライアン
 ## Task 10: deployer オーケストレーション
 
 `deploymentId` 未指定時の警告が、本番事故（Web アプリの URL 変化）を防ぐ唯一の防波堤である。
+
+> **⚠️ 実測に基づく必須の修正（Task 5 のスパイクで判明）**
+>
+> 上限は「**バージョン付きデプロイ20個**」で確定した（21個目で `FAILED_PRECONDITION`）。`@HEAD` デプロイは新規プロジェクトにも最初から1件存在し、**上限の対象外**である。
+>
+> したがって `deployments.length` をそのまま数えると1件ずれる。**バージョン番号を持つものだけを数えること。**
+>
+> ```typescript
+>   const versioned = deployments.filter((deployment) => deployment.versionNumber !== undefined);
+>   if (versioned.length >= DEPLOYMENT_COUNT_WARN_THRESHOLD) {
+>     warnings.push(
+>       `バージョン付きデプロイが ${versioned.length} 件あります。上限は20件です。不要なデプロイを削除してください`,
+>     );
+>   }
+> ```
+>
+> 警告文も「上限は20件」と断定してよい（実測済み）。テストの `listDeployments` スタブは `versionNumber` を持つデプロイを返すようにすること。
 
 **Files:**
 - Create: `packages/core/src/deployer.ts`
@@ -2460,6 +2569,25 @@ git commit -m "ci: typecheck / test / dist 同期チェックのワークフロ�
 
 案 A（API 直叩き）の最大のリスクは「clasp 互換を自前で保証する責任」である。ここで固定する。
 
+> **⚠️ 方式変更（Task 5 のスパイクで判明）**
+>
+> clasp v3 には **`clasp status --json`** があり、push 対象のファイル判定を**機械可読な形で、ネットワークなしに**取得できる。実測した出力:
+>
+> ```json
+> {"filesToPush":["app.js.html","appsscript.json","Code.js","Legacy.gs","ui/Sidebar.html"],
+>  "untrackedFiles":[".clasp.json",".claspignore","Code.test.js","ignored.txt"]}
+> ```
+>
+> 「一度記録した fixture と照合する」のではなく、**テスト実行時に実際の clasp を呼び出して突き合わせられる**。互換性の保証が一段強くなり、fixture の陳腐化も起きない。
+>
+> ただし `clasp status` は `.clasp.json`（scriptId を含む）を必要とする。fixture ディレクトリに scriptId を含むファイルを置きたくないので、**テスト実行時に一時ディレクトリへ fixture をコピーし、ダミーの scriptId を持つ `.clasp.json` を生成してから `clasp status --json` を実行する**構成にすること。`clasp status` がネットワークや認証を要求しないことは実測で確認済み。
+>
+> `@google/clasp` を devDependency に追加する。CI で clasp のインストールが失敗した場合にテスト全体が落ちないよう、clasp が利用できない環境ではこのテストをスキップする（`it.skipIf`）判断も検討すること。
+>
+> **また、`.clasp.json` は v3 で拡張されており、拡張子とファイル種別の対応（`scriptExtensions` / `htmlExtensions` / `jsonExtensions`）と push 順序（`filePushOrder`）がプロジェクトごとに設定可能になっている。** v0.1 では既定値のみ対応とし、README に明記する。
+
+（以下は当初の方式。上記の変更が適用できない場合のフォールバックとして残す。）
+
 clasp を実行するには認証とネットワークが必要なため、**clasp の出力を一度だけ記録した fixture** と照合する方式にする。fixture の再生成手順を併せて残すことで、clasp 側の変更に追従できるようにする。
 
 **Files:**
@@ -2634,7 +2762,7 @@ clasp と認証済みの Google アカウント、および使い捨ての GAS �
    ```bash
    export GAS_CREDENTIALS="$(cat ~/.clasprc.json)"
    export GAS_SCRIPT_ID="<使い捨てプロジェクトの scriptId>"
-   node --experimental-strip-types ../../scripts/spike-verify.ts
+   (cd ../../ && npm run spike)
    ```
 
 5. `[4] getContent` の出力の name / type を `sample-project.expected.json` に反映する

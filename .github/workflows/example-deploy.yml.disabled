@@ -1,0 +1,32 @@
+# これは実地確認用のサンプルワークフローで、意図的に無効化してある（`.disabled` 拡張子）。
+# 有効化するには、このファイルを `.github/workflows/example-deploy.yml` にリネームする。
+#
+# 有効化する前に必ず確認すること:
+#   - secrets.CLASPRC_JSON / secrets.TEST_SCRIPT_ID がリポジトリまたは環境に登録されていること
+#   - トリガーを `pull_request` にしない。fork からの PR には secrets が渡らないため、
+#     このワークフローは動かないか、意図せず secrets を要求して失敗する。動かす場合は
+#     `workflow_dispatch`（このファイルの既定）か、`push`（保護ブランチ限定）にとどめること。
+
+name: Example Deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'true の場合は差分表示のみ行い、実際の書き込みは行わない'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./deploy
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          script-id: ${{ secrets.TEST_SCRIPT_ID }}
+          root-dir: tests/fixtures/sample-project
+          dry-run: ${{ inputs.dry-run }}
