@@ -117,4 +117,25 @@ describe('getAccessToken', () => {
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('プロキシ');
   });
+
+  it('mentions the reauth policy when Google reports invalid_rapt', async () => {
+    const fetchImpl = stubFetch(
+      400,
+      JSON.stringify({
+        error: 'invalid_grant',
+        error_description: 'reauth related error (invalid_rapt)',
+        error_subtype: 'invalid_rapt',
+      }),
+    );
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.join('\n')).toContain('再認証');
+  });
 });

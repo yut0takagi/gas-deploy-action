@@ -23,6 +23,7 @@
  */
 import { parseCredentials } from '../packages/core/src/credentials.ts';
 import { getAccessToken } from '../packages/core/src/auth.ts';
+import { GasDeployError } from '../packages/core/src/errors.ts';
 
 const rawCredentials = process.env['GAS_CREDENTIALS'];
 const scriptId = process.env['GAS_SCRIPT_ID'];
@@ -32,37 +33,50 @@ if (!rawCredentials || !scriptId) {
   process.exit(1);
 }
 
-const credentials = parseCredentials(rawCredentials);
-console.log('[1] credentials のパース: OK');
+async function main(): Promise<void> {
+  const credentials = parseCredentials(rawCredentials!);
+  console.log('[1] credentials のパース: OK');
 
-const accessToken = await getAccessToken(credentials);
-console.log('[2] アクセストークン取得: OK');
+  const accessToken = await getAccessToken(credentials);
+  console.log('[2] アクセストークン取得: OK');
 
-const tokenInfoResponse = await fetch(
-  `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
-);
-const tokenInfo = (await tokenInfoResponse.json()) as { scope?: string };
-console.log('[3] 付与されているスコープ:');
-for (const scope of (tokenInfo.scope ?? '').split(' ')) {
-  console.log(`      ${scope}`);
+  const tokenInfoResponse = await fetch(
+    `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(accessToken)}`,
+  );
+  const tokenInfo = (await tokenInfoResponse.json()) as { scope?: string };
+  console.log('[3] 付与されているスコープ:');
+  for (const scope of (tokenInfo.scope ?? '').split(' ')) {
+    console.log(`      ${scope}`);
+  }
+
+  const contentResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/content`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const content = (await contentResponse.json()) as { files?: Array<{ name: string; type: string }> };
+  console.log(`[4] getContent: ${contentResponse.status}`);
+  for (const file of content.files ?? []) {
+    console.log(`      ${file.type.padEnd(10)} ${file.name}`);
+  }
+  const hasSlash = (content.files ?? []).some((f) => f.name.includes('/'));
+  console.log(`[5] name に "/" を含むファイルの有無: ${hasSlash ? 'あり' : 'なし'}`);
+
+  const deploymentsResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/deployments`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const deployments = (await deploymentsResponse.json()) as { deployments?: unknown[] };
+  console.log(`[6] 現在のデプロイ数: ${(deployments.deployments ?? []).length}`);
+
+  console.log('[7] credentials のトップレベル構造（キー名のみ）:');
+  try {
+    // parseCredentials が返すのは抽出後の Credentials であり、元の JSON 構造（複数ユーザーを
+    // 保持しうるかどうか）を失っている。#6 の検証には元の生 JSON の形を見る必要があるため、
+    // ここでもう一度 JSON.parse するが、パース結果の値は一切出力しない。
+    const rawParsed: unknown = JSON.parse(rawCredentials!);
+    printKeyNamesOnly(rawParsed, '      ', 1);
+  } catch {
+    console.log('      (JSON として再解析できませんでした)');
+  }
 }
-
-const contentResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/content`, {
-  headers: { Authorization: `Bearer ${accessToken}` },
-});
-const content = (await contentResponse.json()) as { files?: Array<{ name: string; type: string }> };
-console.log(`[4] getContent: ${contentResponse.status}`);
-for (const file of content.files ?? []) {
-  console.log(`      ${file.type.padEnd(10)} ${file.name}`);
-}
-const hasSlash = (content.files ?? []).some((f) => f.name.includes('/'));
-console.log(`[5] name に "/" を含むファイルの有無: ${hasSlash ? 'あり' : 'なし'}`);
-
-const deploymentsResponse = await fetch(`https://script.googleapis.com/v1/projects/${scriptId}/deployments`, {
-  headers: { Authorization: `Bearer ${accessToken}` },
-});
-const deployments = (await deploymentsResponse.json()) as { deployments?: unknown[] };
-console.log(`[6] 現在のデプロイ数: ${(deployments.deployments ?? []).length}`);
 
 /**
  * 値の「型」だけを表す文字列を返す。値そのもの（文字列の中身や数値）は絶対に含めない。
@@ -104,13 +118,13 @@ function printKeyNamesOnly(value: unknown, indent: string, remainingDepth: numbe
   }
 }
 
-console.log('[7] credentials のトップレベル構造（キー名のみ）:');
 try {
-  // parseCredentials が返すのは抽出後の Credentials であり、元の JSON 構造（複数ユーザーを
-  // 保持しうるかどうか）を失っている。#6 の検証には元の生 JSON の形を見る必要があるため、
-  // ここでもう一度 JSON.parse するが、パース結果の値は一切出力しない。
-  const rawParsed: unknown = JSON.parse(rawCredentials);
-  printKeyNamesOnly(rawParsed, '      ', 1);
-} catch {
-  console.log('      (JSON として再解析できませんでした)');
+  await main();
+} catch (error) {
+  if (error instanceof GasDeployError) {
+    console.error(error.format());
+  } else {
+    console.error(error instanceof Error ? error.message : String(error));
+  }
+  process.exit(1);
 }

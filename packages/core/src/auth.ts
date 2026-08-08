@@ -5,6 +5,7 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
 const EXPIRY_NEXT_STEPS = [
   'OAuth 同意画面が「テスト」状態の場合、refresh token は7日で失効します。「本番」（個人アカウント）または「内部」（Workspace）に変更してください',
+  'Google Workspace の再認証ポリシーが有効な場合、`invalid_rapt` エラーとともに定期的に失効します。無人実行には再認証を要求されない専用アカウントを使ってください',
   'refresh token は6ヶ月間未使用でも失効します',
   'デプロイに使うアカウントのパスワードが変更されていないか確認してください',
   '認証情報を再発行し、GitHub Secrets を更新してください',
