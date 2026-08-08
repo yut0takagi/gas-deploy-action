@@ -51,7 +51,16 @@ export async function getAccessToken(
     });
   }
 
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (cause) {
+    // 応答本文の読み取り中に接続が切れた場合。本文は取得できていないため cause を保持してよい。
+    throw new GasDeployError('トークンエンドポイントの応答を読み取れませんでした', {
+      cause,
+      nextSteps: CONNECTIVITY_NEXT_STEPS,
+    });
+  }
 
   if (!response.ok) {
     // Google のトークンエンドポイントのエラー応答は RFC 6749 準拠の

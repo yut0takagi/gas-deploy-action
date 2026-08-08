@@ -96,4 +96,25 @@ describe('getAccessToken', () => {
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('プロキシ');
   });
+
+  it('wraps a body-read failure in a guided error', async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new TypeError('terminated');
+      },
+    })) as unknown as typeof fetch;
+
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.join('\n')).toContain('プロキシ');
+  });
 });
