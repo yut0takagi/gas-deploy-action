@@ -4,3 +4,4 @@ export * from './types.js';
 export * from './errors.js';
 export * from './credentials.js';
 export * from './auth.js';
+export * from './ignore.js';
