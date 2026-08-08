@@ -169,6 +169,25 @@ describe('AppsScriptClient.listDeployments', () => {
     expect(secondUrl).toContain('pageToken=tok');
   });
 
+  it('stops with a GasDeployError instead of hanging when nextPageToken repeats forever', async () => {
+    const { client, fetchImpl } = clientWith([
+      { status: 200, body: JSON.stringify({ deployments: [{ deploymentId: 'x' }], nextPageToken: 'tok' }) },
+    ]);
+
+    await expect(client.listDeployments(SCRIPT_ID)).rejects.toThrowError(GasDeployError);
+    // 上限(20ページ)ちょうどで打ち切られ、無限には呼ばれない。
+    expect(fetchImpl).toHaveBeenCalledTimes(20);
+  });
+
+  it('treats an empty-string nextPageToken as "no next page" and terminates normally', async () => {
+    const { client, fetchImpl } = clientWith([
+      { status: 200, body: JSON.stringify({ deployments: [{ deploymentId: 'a' }], nextPageToken: '' }) },
+    ]);
+
+    await expect(client.listDeployments(SCRIPT_ID)).resolves.toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('distinguishes the HEAD deployment, which has no version number', async () => {
     const { client } = clientWith([
       {

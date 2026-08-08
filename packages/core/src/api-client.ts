@@ -11,6 +11,9 @@ const DEFAULT_MAX_RETRIES = 3;
  */
 const DEPLOYMENTS_PAGE_SIZE = 50;
 
+/** ページネーションの暴走を止める上限。20件しか作れないので通常は1ページで足りる。 */
+const MAX_DEPLOYMENT_PAGES = 20;
+
 const CONNECTIVITY_NEXT_STEPS = [
   'ランナーからインターネットに到達できるか確認してください',
   'プロキシやファイアウォールで script.googleapis.com が遮断されていないか確認してください',
@@ -197,8 +200,17 @@ export class AppsScriptClient {
   async listDeployments(scriptId: string): Promise<Deployment[]> {
     const all: RawDeployment[] = [];
     let pageToken: string | undefined;
+    let pages = 0;
 
     do {
+      if (pages >= MAX_DEPLOYMENT_PAGES) {
+        throw new GasDeployError('デプロイ一覧の取得がページ上限に達しました', {
+          nextSteps: [
+            'Apps Script API が想定外の応答を返している可能性があります',
+            'しばらく待って再実行してください',
+          ],
+        });
+      }
       const query = new URLSearchParams({ pageSize: String(DEPLOYMENTS_PAGE_SIZE) });
       if (pageToken !== undefined) {
         query.set('pageToken', pageToken);
@@ -211,7 +223,10 @@ export class AppsScriptClient {
         nextPageToken?: string;
       };
       all.push(...(result.deployments ?? []));
-      pageToken = result.nextPageToken;
+      // 空文字列のトークンは「次ページなし」を意味する（実測）。undefined と区別せず扱うと
+      // while ループが終了条件を失い暴走する。
+      pageToken = result.nextPageToken || undefined;
+      pages += 1;
     } while (pageToken !== undefined);
 
     return all.map(toDeployment);

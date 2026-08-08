@@ -132,6 +132,50 @@ describe('deploy', () => {
     expect(result.warnings.join('\n')).toContain('URL');
   });
 
+  it('warns when most of the remote files would be deleted', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({
+      getContent: vi.fn(async () => [
+        { name: 'appsscript', type: 'JSON', source: MANIFEST },
+        { name: 'Code', type: 'SERVER_JS', source: 'function main() {}' },
+        { name: 'Gone1', type: 'SERVER_JS', source: 'a' },
+        { name: 'Gone2', type: 'SERVER_JS', source: 'b' },
+        { name: 'Gone3', type: 'SERVER_JS', source: 'c' },
+      ]),
+    });
+
+    const result = await deploy(client, { ...baseOptions(rootDir), dryRun: true });
+
+    expect(result.diff.deleted).toEqual(['Gone1', 'Gone2', 'Gone3']);
+    expect(result.warnings.join('\n')).toContain('削除されます');
+  });
+
+  it('does not warn when only a small share of files is deleted', async () => {
+    const rootDir = await makeProject();
+    // makeProject() only creates appsscript.json + Code.js locally, so to genuinely exercise a
+    // "small share deleted" case (rather than tripping the mass-deletion rule via the fixture
+    // itself) we add 8 more local files that the remote side mirrors exactly, plus 2 files that
+    // only exist remotely. That gives 12 remote files with only 2 deleted (~17%), comfortably
+    // under MASS_DELETION_RATIO (50%) even though it clears MASS_DELETION_MIN_FILES (2).
+    const keepNames = Array.from({ length: 8 }, (_, i) => `Keep${i}`);
+    for (const name of keepNames) {
+      await writeFile(join(rootDir, `${name}.js`), 'x', 'utf8');
+    }
+    const remote = [
+      { name: 'appsscript', type: 'JSON' as const, source: MANIFEST },
+      { name: 'Code', type: 'SERVER_JS' as const, source: 'function main() {}' },
+      ...keepNames.map((name) => ({ name, type: 'SERVER_JS' as const, source: 'x' })),
+      { name: 'Gone1', type: 'SERVER_JS' as const, source: 'y' },
+      { name: 'Gone2', type: 'SERVER_JS' as const, source: 'z' },
+    ];
+    const client = fakeClient({ getContent: vi.fn(async () => remote) });
+
+    const result = await deploy(client, { ...baseOptions(rootDir), dryRun: true });
+
+    expect(result.diff.deleted).toEqual(['Gone1', 'Gone2']);
+    expect(result.warnings.join('\n')).not.toContain('削除されます');
+  });
+
   it('stops after updateContent when createVersion is false', async () => {
     const rootDir = await makeProject();
     const client = fakeClient();

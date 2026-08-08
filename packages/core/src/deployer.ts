@@ -9,6 +9,15 @@ export const DEPLOYMENT_LIMIT = 20;
 /** 上限に達する手前で警告する。 */
 export const DEPLOYMENT_COUNT_WARN_THRESHOLD = 18;
 
+/**
+ * 削除がこの割合以上を占める場合に警告する。
+ * root-dir の指定ミスやビルド失敗で、稼働中のスクリプトが空になる事故を防ぐ。
+ */
+export const MASS_DELETION_RATIO = 0.5;
+
+/** 1〜2 件の通常の削除で警告しないための下限。 */
+export const MASS_DELETION_MIN_FILES = 2;
+
 export interface DeployOptions {
   scriptId: string;
   rootDir: string;
@@ -48,6 +57,15 @@ export async function deploy(client: AppsScriptClient, options: DeployOptions): 
   const needsStableUrl = options.projectType === 'webapp' || options.projectType === 'addon';
   if (needsStableUrl && !options.deploymentId) {
     warnings.push(URL_CHANGE_WARNING);
+  }
+
+  const isMassDeletion =
+    diff.deleted.length >= MASS_DELETION_MIN_FILES &&
+    diff.deleted.length >= Math.ceil(remote.length * MASS_DELETION_RATIO);
+  if (isMassDeletion) {
+    warnings.push(
+      `リモートの ${remote.length} 件のうち ${diff.deleted.length} 件が削除されます。root-dir の指定やビルド結果が正しいか確認してください`,
+    );
   }
 
   if (options.dryRun) {
