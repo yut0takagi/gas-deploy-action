@@ -70,7 +70,7 @@ export async function resolveIgnorePatterns(rootDir: string, rawInput: string): 
   }
 }
 
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
   // ネットワーク呼び出し（getAccessToken / deploy）の前に、ローカルで検証できる入力を
   // すべて読み切って失敗させる。script-id が無いだけで OAuth トークンを無駄に取得しない。
   const rootDir = core.getInput('root-dir') || '.';
@@ -113,12 +113,3 @@ async function run(): Promise<void> {
 
   await core.summary.addRaw(summary).write();
 }
-
-// esbuild の cjs 出力はトップレベル await を扱えないため、必ず関数の中で await する。
-void run().catch((error: unknown) => {
-  if (error instanceof GasDeployError) {
-    core.setFailed(error.format());
-  } else {
-    core.setFailed(error instanceof Error ? error.message : String(error));
-  }
-});

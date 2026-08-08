@@ -8,10 +8,6 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -28,7 +24,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/@actions/core/lib/utils.js
 var require_utils = __commonJS({
@@ -21580,16 +21575,8 @@ var require_picomatch2 = __commonJS({
   }
 });
 
-// deploy/src/main.ts
-var main_exports = {};
-__export(main_exports, {
-  parseProjectType: () => parseProjectType,
-  resolveIgnorePatterns: () => resolveIgnorePatterns
-});
-module.exports = __toCommonJS(main_exports);
-var import_promises2 = require("node:fs/promises");
-var import_node_path2 = require("node:path");
-var core = __toESM(require_core(), 1);
+// deploy/src/index.ts
+var core2 = __toESM(require_core(), 1);
 
 // packages/core/src/errors.ts
 var GasDeployError = class extends Error {
@@ -21984,6 +21971,7 @@ var BASE_URL = "https://script.googleapis.com/v1";
 var MANIFEST_FILE_NAME = "appsscript";
 var DEFAULT_MAX_RETRIES = 3;
 var DEPLOYMENTS_PAGE_SIZE = 50;
+var MAX_DEPLOYMENT_PAGES = 20;
 var CONNECTIVITY_NEXT_STEPS2 = [
   "\u30E9\u30F3\u30CA\u30FC\u304B\u3089\u30A4\u30F3\u30BF\u30FC\u30CD\u30C3\u30C8\u306B\u5230\u9054\u3067\u304D\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u30D7\u30ED\u30AD\u30B7\u3084\u30D5\u30A1\u30A4\u30A2\u30A6\u30A9\u30FC\u30EB\u3067 script.googleapis.com \u304C\u906E\u65AD\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -22118,7 +22106,16 @@ var AppsScriptClient = class {
   async listDeployments(scriptId) {
     const all = [];
     let pageToken;
+    let pages = 0;
     do {
+      if (pages >= MAX_DEPLOYMENT_PAGES) {
+        throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u306E\u53D6\u5F97\u304C\u30DA\u30FC\u30B8\u4E0A\u9650\u306B\u9054\u3057\u307E\u3057\u305F", {
+          nextSteps: [
+            "Apps Script API \u304C\u60F3\u5B9A\u5916\u306E\u5FDC\u7B54\u3092\u8FD4\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059",
+            "\u3057\u3070\u3089\u304F\u5F85\u3063\u3066\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
+          ]
+        });
+      }
       const query = new URLSearchParams({ pageSize: String(DEPLOYMENTS_PAGE_SIZE) });
       if (pageToken !== void 0) {
         query.set("pageToken", pageToken);
@@ -22128,7 +22125,8 @@ var AppsScriptClient = class {
         `/projects/${encodePathSegment(scriptId)}/deployments?${query.toString()}`
       );
       all.push(...result.deployments ?? []);
-      pageToken = result.nextPageToken;
+      pageToken = result.nextPageToken || void 0;
+      pages += 1;
     } while (pageToken !== void 0);
     return all.map(toDeployment);
   }
@@ -22160,6 +22158,8 @@ var AppsScriptClient = class {
 // packages/core/src/deployer.ts
 var DEPLOYMENT_LIMIT = 20;
 var DEPLOYMENT_COUNT_WARN_THRESHOLD = 18;
+var MASS_DELETION_RATIO = 0.5;
+var MASS_DELETION_MIN_FILES = 2;
 var URL_CHANGE_WARNING = "deployment-id \u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3001Web \u30A2\u30D7\u30EA\u306E URL \u304C\u5909\u308F\u308A\u307E\u3059\u3002\u65E2\u5B58\u306E URL \u3092\u7DAD\u6301\u3059\u308B\u306B\u306F deployment-id \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044";
 async function deploy(client, options) {
   const warnings = [];
@@ -22172,6 +22172,12 @@ async function deploy(client, options) {
   const needsStableUrl = options.projectType === "webapp" || options.projectType === "addon";
   if (needsStableUrl && !options.deploymentId) {
     warnings.push(URL_CHANGE_WARNING);
+  }
+  const isMassDeletion = diff.deleted.length >= MASS_DELETION_MIN_FILES && diff.deleted.length >= Math.ceil(remote.length * MASS_DELETION_RATIO);
+  if (isMassDeletion) {
+    warnings.push(
+      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u307E\u3059\u3002root-dir \u306E\u6307\u5B9A\u3084\u30D3\u30EB\u30C9\u7D50\u679C\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
   }
   if (options.dryRun) {
     return { changed: true, diff, warnings };
@@ -22195,6 +22201,11 @@ async function deploy(client, options) {
   }
   return result;
 }
+
+// deploy/src/main.ts
+var import_promises2 = require("node:fs/promises");
+var import_node_path2 = require("node:path");
+var core = __toESM(require_core(), 1);
 
 // deploy/src/summary.ts
 function section(title, items) {
@@ -22307,15 +22318,12 @@ async function run() {
   core.setOutput("summary", summary2);
   await core.summary.addRaw(summary2).write();
 }
+
+// deploy/src/index.ts
 void run().catch((error) => {
   if (error instanceof GasDeployError) {
-    core.setFailed(error.format());
+    core2.setFailed(error.format());
   } else {
-    core.setFailed(error instanceof Error ? error.message : String(error));
+    core2.setFailed(error instanceof Error ? error.message : String(error));
   }
-});
-// Annotate the CommonJS export names for ESM import in node:
-0 && (module.exports = {
-  parseProjectType,
-  resolveIgnorePatterns
 });
