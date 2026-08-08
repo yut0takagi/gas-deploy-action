@@ -35,17 +35,19 @@ const URL_CHANGE_WARNING =
 export async function deploy(client: AppsScriptClient, options: DeployOptions): Promise<DeployResult> {
   const warnings: string[] = [];
 
-  const needsStableUrl = options.projectType === 'webapp' || options.projectType === 'addon';
-  if (needsStableUrl && !options.deploymentId) {
-    warnings.push(URL_CHANGE_WARNING);
-  }
-
   const local = await collectFiles(options.rootDir, options.ignore);
   const remote = await client.getContent(options.scriptId);
   const diff = diffFiles(local, remote);
 
   if (!hasChanges(diff)) {
     return { changed: false, diff, warnings };
+  }
+
+  // 差分がある場合にのみ警告する。何もしない実行で毎回警告すると、本当に危険な実行の
+  // 警告が埋もれる。dry-run では「実際に走らせたらどうなるか」を示す必要があるため出す。
+  const needsStableUrl = options.projectType === 'webapp' || options.projectType === 'addon';
+  if (needsStableUrl && !options.deploymentId) {
+    warnings.push(URL_CHANGE_WARNING);
   }
 
   if (options.dryRun) {

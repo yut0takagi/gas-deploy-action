@@ -108,6 +108,30 @@ describe('deploy', () => {
     expect(result.warnings.join('\n')).not.toContain('URL');
   });
 
+  it('does not warn about the url when there is nothing to deploy', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({
+      getContent: vi.fn(async () => [
+        { name: 'Code', type: 'SERVER_JS', source: 'function main() {}' },
+        { name: 'appsscript', type: 'JSON', source: MANIFEST },
+      ]),
+    });
+
+    const result = await deploy(client, { ...baseOptions(rootDir), projectType: 'webapp' });
+
+    expect(result.changed).toBe(false);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('still warns about the url during a dry run, since a dry run previews consequences', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient();
+
+    const result = await deploy(client, { ...baseOptions(rootDir), projectType: 'webapp', dryRun: true });
+
+    expect(result.warnings.join('\n')).toContain('URL');
+  });
+
   it('stops after updateContent when createVersion is false', async () => {
     const rootDir = await makeProject();
     const client = fakeClient();
