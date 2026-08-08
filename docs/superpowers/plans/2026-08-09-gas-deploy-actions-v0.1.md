@@ -507,6 +507,20 @@ describe('parseCredentials', () => {
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('.clasprc.json');
   });
+
+  it('does not carry the malformed input into the error cause', () => {
+    const secret = 'SUPER-SECRET-NOT-JSON';
+    const err = (() => {
+      try {
+        parseCredentials(secret);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.cause).toBeUndefined();
+  });
 });
 ```
 
@@ -576,9 +590,10 @@ export function parseCredentials(raw: string): Credentials {
   let json: unknown;
   try {
     json = JSON.parse(raw);
-  } catch (cause) {
+  } catch {
+    // SyntaxError のメッセージは入力の先頭断片をそのまま含む。credentials は秘密情報そのものなので
+    // cause には載せない。診断に必要な情報は nextSteps で伝える。
     throw new GasDeployError('credentials の JSON を解析できませんでした', {
-      cause,
       nextSteps: [
         'GitHub Secrets に登録した値が JSON 全体になっているか確認してください',
         'ファイルの内容を貼り付ける際に前後の空白や改行が混入していないか確認してください',
@@ -599,7 +614,7 @@ export function parseCredentials(raw: string): Credentials {
 - [ ] **Step 4: テストを実行して成功を確認**
 
 Run: `npx vitest run packages/core/src/credentials.test.ts`
-Expected: `6 passed`
+Expected: `7 passed`
 
 - [ ] **Step 5: `index.ts` に再エクスポートを追加**
 
@@ -897,6 +912,17 @@ getContent が返した name 一覧:
 （spike-verify.ts の [4] の出力を貼り付け）
 
 判定: <"/" 区切りで表現できる / できない>
+
+## #6 .clasprc.json の複数ユーザー保持
+
+`~/.clasprc.json` のトップレベル構造（**値は伏せ、キー名だけ**を記録すること）:
+```
+（例: { "tokens": { "default": ... } } のようにキー名のみ）
+```
+
+複数ユーザーを保持しうる構造か: <はい / いいえ>
+
+判定: <現行の「最初に一致したものを採用」で問題ない / default 優先などの対応が必要>
 ```
 
 - [ ] **Step 6: 結果に応じてスペックを更新**
