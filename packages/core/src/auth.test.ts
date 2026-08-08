@@ -132,6 +132,54 @@ describe('getAccessToken', () => {
     expect(REQUESTED_SCOPES).not.toContain('drive');
   });
 
+  it('explains a scope mismatch rather than blaming token expiry', async () => {
+    const fetchImpl = stubFetch(
+      400,
+      JSON.stringify({ error: 'invalid_scope', error_description: 'Some requested scopes were invalid.' }),
+    );
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.join('\n')).toContain('script.projects');
+    expect(err!.nextSteps.join('\n')).not.toContain('テスト');
+  });
+
+  it('still blames token expiry for invalid_grant', async () => {
+    const fetchImpl = stubFetch(400, JSON.stringify({ error: 'invalid_grant' }));
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+
+    expect(err!.nextSteps.join('\n')).toContain('テスト');
+  });
+
+  it('falls back to the default guidance when the error body is not JSON', async () => {
+    const fetchImpl = stubFetch(500, '<html>proxy error</html>');
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect(err!.nextSteps.length).toBeGreaterThan(0);
+  });
+
   it('mentions the reauth policy when Google reports invalid_rapt', async () => {
     const fetchImpl = stubFetch(
       400,

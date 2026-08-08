@@ -22,6 +22,13 @@ const PARSE_FAILURE_NEXT_STEPS = [
   '一時的な障害の可能性があります。しばらく待って再実行してください',
 ];
 
+const SCOPE_NEXT_STEPS = [
+  '認証情報に script.projects と script.deployments の両方が付与されているか確認してください',
+  'リフレッシュトークンは元々付与されたスコープの範囲内でしか絞り込めません。不足している場合は認証をやり直す必要があります',
+  'clasp login で発行した認証情報にはこの2つが含まれます',
+  '自前の OAuth クライアントを使う場合は、同意画面にこの2つのスコープを追加してください',
+];
+
 /**
  * 要求するスコープ。リフレッシュ交換時に明示的に指定して絞り込む。
  *
@@ -82,10 +89,26 @@ export async function getAccessToken(
     // Google のトークンエンドポイントのエラー応答は RFC 6749 準拠の
     // { "error": "...", "error_description": "..." } 形式で、送信した
     // client_secret や refresh_token をエコーバックしない。診断に有用なので cause に残す。
-    throw new GasDeployError(`アクセストークンの取得に失敗しました (${response.status})`, {
-      cause: text,
-      nextSteps: EXPIRY_NEXT_STEPS,
-    });
+    let oauthError: string | undefined;
+    try {
+      const parsedError = JSON.parse(text) as { error?: unknown };
+      if (typeof parsedError.error === 'string') {
+        oauthError = parsedError.error;
+      }
+    } catch {
+      // 本文が JSON でない場合は判別を諦め、既定の案内にフォールバックする。
+    }
+
+    const isScopeProblem = oauthError === 'invalid_scope';
+    throw new GasDeployError(
+      isScopeProblem
+        ? `要求したスコープが認証情報に付与されていません (${response.status})`
+        : `アクセストークンの取得に失敗しました (${response.status})`,
+      {
+        cause: text,
+        nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS,
+      },
+    );
   }
 
   let parsed: unknown;
