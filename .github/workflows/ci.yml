@@ -30,7 +30,8 @@ jobs:
 
       - name: Verify dist is in sync
         run: |
-          if ! git diff --exit-code -- deploy/dist; then
+          if [ -n "$(git status --porcelain -- deploy/dist)" ]; then
             echo "::error::deploy/dist がソースと同期していません。'npm run build' を実行してコミットしてください"
+            git status --porcelain -- deploy/dist
             exit 1
           fi
