@@ -49,11 +49,31 @@ async function walk(dir: string, root: string, out: string[]): Promise<void> {
  * 拡張子は name から取り除かれ、サブディレクトリは "/" 区切りで保持される。
  */
 export async function collectFiles(rootDir: string, ignorePatterns: readonly string[]): Promise<ScriptFile[]> {
+  let rootStats;
+  try {
+    rootStats = await stat(rootDir);
+  } catch (cause) {
+    throw new GasDeployError(`${rootDir} を読み取れません`, {
+      cause,
+      nextSteps: [
+        'root-dir が存在するディレクトリを指しているか確認してください',
+        'ビルド出力を root-dir に指定している場合、デプロイ前にビルドが実行されているか確認してください',
+      ],
+    });
+  }
+
+  if (!rootStats.isDirectory()) {
+    throw new GasDeployError(`${rootDir} はディレクトリではありません`, {
+      nextSteps: ['root-dir にはファイルではなくディレクトリを指定してください'],
+    });
+  }
+
   const relativePaths: string[] = [];
   await walk(rootDir, rootDir, relativePaths);
 
   const isIgnored = createIgnoreFilter(ignorePatterns);
   const files: ScriptFile[] = [];
+  const seen = new Map<string, string>();
 
   for (const relativePath of relativePaths) {
     if (isIgnored(relativePath)) continue;
@@ -66,6 +86,19 @@ export async function collectFiles(rootDir: string, ignorePatterns: readonly str
 
     // Apps Script が保持できる JSON はマニフェストのみ。
     if (type === 'JSON' && name !== MANIFEST_NAME) continue;
+
+    const key = `${name} ${type}`;
+    const existing = seen.get(key);
+    if (existing !== undefined) {
+      throw new GasDeployError(`${existing} と ${relativePath} は Apps Script 上で同じファイル (${name} / ${type}) になります`, {
+        nextSteps: [
+          'どちらか一方を削除するか、ファイル名を変更してください',
+          '.gs から .js への移行途中で古いファイルが残っていないか確認してください',
+          'clasp も同じ状況で "Conflicting files found" として push 全体を拒否します',
+        ],
+      });
+    }
+    seen.set(key, relativePath);
 
     const stats = await stat(join(rootDir, relativePath));
     if (stats.size > MAX_FILE_BYTES) {

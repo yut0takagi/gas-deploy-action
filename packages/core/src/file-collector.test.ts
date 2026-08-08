@@ -121,7 +121,7 @@ describe('collectFiles', () => {
 
     const files = await collectFiles(root, []);
 
-    expect(files.map((f) => f.name)).toContain('Linked');
+    expect(files).toContainEqual({ name: 'Linked', type: 'SERVER_JS', source: 'function main() {}' });
   });
 
   it('does not traverse a symlink pointing at a directory, as clasp does', async () => {
@@ -151,5 +151,41 @@ describe('collectFiles', () => {
 
     expect(err).toBeInstanceOf(GasDeployError);
     expect((err as GasDeployError).nextSteps.length).toBeGreaterThan(0);
+  });
+
+  it('skips extension-less files and dotfiles', async () => {
+    const root = await makeProject({
+      'appsscript.json': MANIFEST,
+      'Code.js': 'function main() {}',
+      Makefile: 'all:',
+      '.eslintrc': '{}',
+    });
+
+    const files = await collectFiles(root, []);
+
+    expect(files.map((f) => f.name)).toEqual(['Code', 'appsscript']);
+  });
+
+  it('reports a guided error when rootDir does not exist', async () => {
+    const err = await collectFiles(join(tmpdir(), 'gas-does-not-exist-12345'), []).catch(
+      (e: GasDeployError) => e,
+    );
+
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect((err as GasDeployError).nextSteps.length).toBeGreaterThan(0);
+  });
+
+  it('refuses to collect two files that would become the same Apps Script file', async () => {
+    const root = await makeProject({
+      'appsscript.json': MANIFEST,
+      'Code.js': 'function fromJs() {}',
+      'Code.gs': 'function fromGs() {}',
+    });
+
+    const err = await collectFiles(root, []).catch((e: GasDeployError) => e);
+
+    expect(err).toBeInstanceOf(GasDeployError);
+    expect((err as GasDeployError).message).toContain('Code.js');
+    expect((err as GasDeployError).message).toContain('Code.gs');
   });
 });
