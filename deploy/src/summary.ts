@@ -1,4 +1,4 @@
-import type { DeployResult } from '@gas-deploy/core';
+import type { DeployResult, MultiDeployResult, ResolvedTarget } from '@gas-deploy/core';
 
 function section(title: string, items: string[]): string[] {
   if (items.length === 0) return [];
@@ -26,6 +26,59 @@ export function renderSummary(result: DeployResult): string {
 
   if (result.warnings.length > 0) {
     lines.push('### ⚠️ 警告', '', ...result.warnings.map((warning) => `- ${warning}`), '');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * 複数プロジェクトモード用のサマリを描画する。
+ *
+ * `targets` は `resolveTargets` が返した対象一覧（宣言順）で、`result.completed` /
+ * `result.failed` と突き合わせて「未実行のまま終わったプロジェクト」を導出するために使う。
+ * 赤い実行結果だけを見て、どのプロジェクトが実際にデプロイ済みでどれが手つかずかを
+ * 読み取れることが目的なので、失敗時はその状況を明示するセクションを必ず出す。
+ */
+export function renderMultiSummary(result: MultiDeployResult, targets: readonly ResolvedTarget[]): string {
+  const lines: string[] = ['## GAS デプロイ結果（複数プロジェクト）', ''];
+
+  for (const entry of result.completed) {
+    lines.push(`### ${entry.project} (${entry.environment})`, '');
+    lines.push(entry.result.changed ? '変更あり' : '差分がないため、変更はありません。', '');
+
+    const facts: string[] = [];
+    if (entry.result.versionNumber !== undefined) facts.push(`- バージョン: \`${entry.result.versionNumber}\``);
+    if (entry.result.deploymentId !== undefined) facts.push(`- デプロイ ID: \`${entry.result.deploymentId}\``);
+    if (entry.result.webAppUrl !== undefined) facts.push(`- Web アプリ URL: ${entry.result.webAppUrl}`);
+    if (facts.length > 0) lines.push(...facts, '');
+
+    if (entry.result.warnings.length > 0) {
+      lines.push('#### ⚠️ 警告', '', ...entry.result.warnings.map((warning) => `- ${warning}`), '');
+    }
+  }
+
+  if (result.failed) {
+    const attempted = new Set(result.completed.map((entry) => entry.project));
+    attempted.add(result.failed.project);
+    const neverAttempted = targets.filter((target) => !attempted.has(target.project));
+
+    lines.push(
+      '### ❌ 失敗',
+      '',
+      `**${result.failed.project}** (${result.failed.environment}) のデプロイに失敗しました。以降のプロジェクトは実行されていません。`,
+      '',
+      result.failed.error.format(),
+      '',
+    );
+
+    lines.push(
+      '### デプロイ状況',
+      '',
+      `- 完了済み: ${result.completed.length > 0 ? result.completed.map((entry) => entry.project).join(', ') : 'なし'}`,
+      `- 失敗: ${result.failed.project}`,
+      `- 未実行: ${neverAttempted.length > 0 ? neverAttempted.map((target) => target.project).join(', ') : 'なし'}`,
+      '',
+    );
   }
 
   return lines.join('\n');

@@ -9,10 +9,10 @@ inputs:
     description: 'clasp の .clasprc.json、または {client_id, client_secret, refresh_token} の JSON'
     required: true
   script-id:
-    description: 'デプロイ先の scriptId'
-    required: true
+    description: 'デプロイ先の scriptId。指定すると単一プロジェクトモードになり、config は無視されます'
+    required: false
   root-dir:
-    description: 'アップロードするファイルのルートディレクトリ'
+    description: 'アップロードするファイルのルートディレクトリ（単一プロジェクトモードのみ）'
     required: false
     default: '.'
   deployment-id:
@@ -36,18 +36,31 @@ inputs:
   description:
     description: 'バージョンの説明。省略時は ci-<sha7>-<run_number>'
     required: false
+  config:
+    description: '複数プロジェクトモードで使う設定ファイルのパス（script-id が未指定のときのみ使用）'
+    required: false
+    default: 'gasdeploy.yml'
+  environment:
+    description: '複数プロジェクトモードでデプロイする environment 名。config モードでは必須です'
+    required: false
+  projects:
+    description: '複数プロジェクトモードでデプロイするプロジェクト名（カンマ区切り）。all で全プロジェクト'
+    required: false
+    default: 'all'
 
 outputs:
   changed:
     description: '差分があったかどうか（true / false）'
   version-number:
-    description: '作成されたバージョン番号'
+    description: '作成されたバージョン番号（単一プロジェクトモードのみ）'
   deployment-id:
-    description: '更新または作成されたデプロイ ID'
+    description: '更新または作成されたデプロイ ID（単一プロジェクトモードのみ）'
   web-app-url:
-    description: 'Web アプリの URL（該当する場合）'
+    description: 'Web アプリの URL（該当する場合、単一プロジェクトモードのみ）'
   summary:
     description: '人間可読のサマリ（Markdown）'
+  deployments:
+    description: '複数プロジェクトモードでの各プロジェクトの結果（JSON 配列: project, environment, scriptId, changed, versionNumber, deploymentId, webAppUrl）'
 
 runs:
   using: 'node24'
