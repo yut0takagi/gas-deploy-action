@@ -51,4 +51,6 @@ outputs:
 
 runs:
   using: 'node24'
-  main: 'dist/index.js'
+  # .cjs であること。deploy/package.json の "type": "module" により、
+  # .js だと Node が ESM として解釈して CJS バンドルが動かない。
+  main: 'dist/index.cjs'
