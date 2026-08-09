@@ -1,4 +1,9 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/core" }, { "path": "./deploy" }, { "path": "./tests" }]
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/setup-cli" },
+    { "path": "./deploy" },
+    { "path": "./tests" }
+  ]
 }
