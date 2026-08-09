@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --build",
     "build": "node scripts/build.mjs",
-    "spike": "esbuild scripts/spike-verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/spike-verify.mjs && node node_modules/.cache/spike-verify.mjs"
+    "spike": "esbuild scripts/spike-verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/spike-verify.mjs && node node_modules/.cache/spike-verify.mjs",
+    "setup": "esbuild packages/setup-cli/src/index.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/setup-cli.mjs && node node_modules/.cache/setup-cli.mjs"
   },
   "devDependencies": {
     "@google/clasp": "^3.3.0",
