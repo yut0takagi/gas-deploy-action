@@ -16,6 +16,44 @@ import type { Deployment } from './types.js';
 export const HEAD_NOT_REVERTED_WARNING =
   'ロールバックはデプロイの参照先バージョンを変更するだけで、スクリプトの HEAD（エディタ上のソース）は元に戻りません。リポジトリ側も revert しないと、次回のデプロイで問題のあるコードが再び本番に反映されます';
 
+/**
+ * 読み取りが安定するまでの最大試行回数。実測では書き込みから約 8.5 秒で安定した。
+ */
+export const STABILITY_ATTEMPTS = 6;
+
+/** 安定化のための読み取り間隔。 */
+export const STABILITY_DELAY_MS = 2000;
+
+/**
+ * `deployments.update` の直後、`deployments.list` は数秒間にわたり古い値を返しうる。
+ * さらに読み取りは単調ですらなく、新しい値 → 古い値 → 新しい値 と揺れる（実測）。
+ * レプリカごとに反映状況が異なるためと思われる。
+ *
+ * これを放置すると、デプロイ直後のロールバックが古い versionNumber を「現在」と
+ * 誤認し、意図より1つ余計に古いバージョンへ静かに戻る。障害対応で最もありがちな
+ * 流れがそのまま事故になるため、連続2回の読み取りが一致するまで待つ。
+ *
+ * これは確率を下げるだけで、保証ではない（2回とも同じ古いレプリカに当たる可能性は
+ * 残る）。確実性が要る場面では version-number を明示すること。
+ */
+async function getDeploymentStable(
+  client: AppsScriptClient,
+  scriptId: string,
+  deploymentId: string,
+  sleep: (milliseconds: number) => Promise<void>,
+): Promise<{ deployment: Deployment; stable: boolean }> {
+  let previous = await client.getDeployment(scriptId, deploymentId);
+  for (let attempt = 1; attempt < STABILITY_ATTEMPTS; attempt += 1) {
+    await sleep(STABILITY_DELAY_MS);
+    const current = await client.getDeployment(scriptId, deploymentId);
+    if (current.versionNumber === previous.versionNumber) {
+      return { deployment: current, stable: true };
+    }
+    previous = current;
+  }
+  return { deployment: previous, stable: false };
+}
+
 export interface RollbackOptions {
   scriptId: string;
   /** 省略時は、バージョン付きデプロイがちょうど1つある場合に限り自動で特定する。 */
@@ -25,6 +63,8 @@ export interface RollbackOptions {
   dryRun: boolean;
   /** 省略時は戻し元・戻り先のバージョンを含む既定の説明。 */
   description?: string;
+  /** 読み取り安定化の待機。テストから差し替えるためだけの入口。 */
+  sleep?: (milliseconds: number) => Promise<void>;
 }
 
 export interface RollbackResult {
@@ -114,11 +154,35 @@ function resolveTargetDeployment(deployments: readonly Deployment[], deploymentI
  * 途中で失敗しても中途半端な状態は残らない。
  */
 export async function rollback(client: AppsScriptClient, options: RollbackOptions): Promise<RollbackResult> {
-  const deployments = await client.listDeployments(options.scriptId);
-  const target = resolveTargetDeployment(deployments, options.deploymentId);
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
 
-  // resolveTargetDeployment が versionNumber を持つものだけを返すことは保証されているが、
-  // 型としては optional なので明示的に取り出す。
+  // 一覧は「どのデプロイを対象にするか」の特定にのみ使う。デプロイが @HEAD かどうかや
+  // その ID は反映遅延で入れ替わらないので、一覧の鮮度は問題にならない。
+  const deployments = await client.listDeployments(options.scriptId);
+  const resolved = resolveTargetDeployment(deployments, options.deploymentId);
+
+  // 現在のバージョンは一覧ではなく単体取得から確定させる。一覧は書き込み後に
+  // 複数のレプリカ状態を行き来する（実測）。
+  const { deployment: target, stable } = await getDeploymentStable(
+    client,
+    options.scriptId,
+    resolved.deploymentId,
+    sleep,
+  );
+
+  // 読み取りが安定しないまま「1つ前」を計算すると、意図より古いバージョンへ戻りうる。
+  // 戻り先が明示されている場合は影響が無害な範囲（無操作判定とロールフォワード判定）に
+  // 留まるので、警告して続行する。
+  if (!stable && options.versionNumber === undefined) {
+    throw new GasDeployError('デプロイの現在のバージョンを確定できませんでした（読み取りが安定していません）', {
+      nextSteps: [
+        'デプロイの直後は、Apps Script API がしばらく古い値を返すことがあります',
+        'version-number 入力で戻り先のバージョンを明示してください（明示すればこの問題の影響を受けません）',
+        '数十秒待ってから再実行しても解消します',
+      ],
+    });
+  }
+
   const fromVersion = target.versionNumber;
   if (fromVersion === undefined) {
     throw new GasDeployError('デプロイのバージョン番号を取得できませんでした');
@@ -144,11 +208,18 @@ export async function rollback(client: AppsScriptClient, options: RollbackOption
 
   const warnings: string[] = [HEAD_NOT_REVERTED_WARNING];
 
+  if (!stable) {
+    // ここに来るのは version-number が明示されている場合のみ（未指定なら上で失敗する）。
+    warnings.push(
+      `デプロイの現在のバージョンの読み取りが安定していません。戻り先の v${options.versionNumber} は指定どおりですが、現在のバージョンとして表示している v${fromVersion} は実際と異なる可能性があります`,
+    );
+  }
+
   if (toVersion === fromVersion) {
     // 「すでにそうなっている」を成功として黙って返すと、ロールバックが効いたのか
     // 元から同じだったのか区別できない。書き込みは行わず、その旨を警告として残す。
     warnings.push(`デプロイはすでに v${toVersion} を指しています。変更は行いませんでした`);
-    return { rolledBack: false, deploymentId: target.deploymentId, fromVersion, toVersion, warnings };
+    return { rolledBack: false, deploymentId: resolved.deploymentId, fromVersion, toVersion, warnings };
   }
 
   // 戻り先の実在確認。dry-run でも必ず行う。ここを省くと dry-run が
@@ -178,7 +249,7 @@ export async function rollback(client: AppsScriptClient, options: RollbackOption
 
   const result: RollbackResult = {
     rolledBack: false,
-    deploymentId: target.deploymentId,
+    deploymentId: resolved.deploymentId,
     fromVersion,
     toVersion,
     warnings,
@@ -191,7 +262,7 @@ export async function rollback(client: AppsScriptClient, options: RollbackOption
   }
 
   const description = options.description ?? `rollback to v${toVersion} (was v${fromVersion})`;
-  const updated = await client.updateDeployment(options.scriptId, target.deploymentId, toVersion, description);
+  const updated = await client.updateDeployment(options.scriptId, resolved.deploymentId, toVersion, description);
 
   result.rolledBack = true;
   if (updated.webAppUrl !== undefined) result.webAppUrl = updated.webAppUrl;

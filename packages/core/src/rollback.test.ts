@@ -26,6 +26,11 @@ function version(versionNumber: number, overrides: Partial<Version> = {}): Versi
 function fakeClient(overrides: Record<string, unknown> = {}) {
   const client = {
     listDeployments: vi.fn(async (): Promise<Deployment[]> => [HEAD, LIVE]),
+    getDeployment: vi.fn(async (_scriptId: string, deploymentId: string): Promise<Deployment> => {
+      const found = [HEAD, LIVE].find((entry) => entry.deploymentId === deploymentId);
+      if (found === undefined) throw new Error(`unexpected deploymentId: ${deploymentId}`);
+      return found;
+    }),
     getVersion: vi.fn(async (_scriptId: string, versionNumber: number) => version(versionNumber)),
     updateDeployment: vi.fn(
       async (
@@ -44,8 +49,9 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
   return client as unknown as AppsScriptClient & typeof client;
 }
 
+/** 読み取り安定化の待機はテストでは不要。実時間を待つと全体が数十秒遅くなる。 */
 function baseOptions() {
-  return { scriptId: 'script-abc', dryRun: false };
+  return { scriptId: 'script-abc', dryRun: false, sleep: async (): Promise<void> => undefined };
 }
 
 /** GasDeployError#format() は message と nextSteps の両方を含むため、案内文まで検証できる。 */
@@ -125,7 +131,11 @@ describe('rollback', () => {
     });
 
     it('現在のバージョンが 1 の場合、戻り先が無いため失敗する', async () => {
-      const client = fakeClient({ listDeployments: vi.fn(async () => [HEAD, { ...LIVE, versionNumber: 1 }]) });
+      const first: Deployment = { ...LIVE, versionNumber: 1 };
+      const client = fakeClient({
+        listDeployments: vi.fn(async () => [HEAD, first]),
+        getDeployment: vi.fn(async () => first),
+      });
 
       const message = await formatOfRejection(rollback(client, baseOptions()));
 
@@ -257,6 +267,71 @@ describe('rollback', () => {
       await rollback(client, { ...baseOptions(), description: 'incident-1234 の復旧' });
 
       expect(client.updateDeployment).toHaveBeenCalledWith('script-abc', 'dep-live', 41, 'incident-1234 の復旧');
+    });
+  });
+
+  describe('読み取りの安定化', () => {
+    /** 単体取得の versionNumber が呼び出しごとに揺れるクライアントを作る。 */
+    function flakyClient(sequence: readonly number[]) {
+      let call = 0;
+      return fakeClient({
+        getDeployment: vi.fn(async (): Promise<Deployment> => {
+          const versionNumber = sequence[Math.min(call, sequence.length - 1)] ?? 42;
+          call += 1;
+          return { ...LIVE, versionNumber };
+        }),
+      });
+    }
+
+    it('連続2回の読み取りが一致するまで待つ', async () => {
+      // 1回目 40、2回目 42、3回目 42 → 2回目と3回目が一致した時点で確定する。
+      const client = flakyClient([40, 42, 42]);
+
+      const result = await rollback(client, baseOptions());
+
+      expect(result.fromVersion).toBe(42);
+      expect(result.toVersion).toBe(41);
+      expect(client.getDeployment).toHaveBeenCalledTimes(3);
+    });
+
+    it('現在のバージョンは一覧ではなく単体取得から確定させる', async () => {
+      // 一覧が古い値を返しても、単体取得の値が使われること。
+      const client = fakeClient({
+        listDeployments: vi.fn(async (): Promise<Deployment[]> => [HEAD, { ...LIVE, versionNumber: 99 }]),
+      });
+
+      const result = await rollback(client, baseOptions());
+
+      expect(result.fromVersion).toBe(42);
+    });
+
+    it('揺れが収まらず戻り先も未指定なら、推測せず失敗する', async () => {
+      // 毎回違う値を返す。「1つ前」を計算する根拠が無い。
+      const client = flakyClient([40, 42, 38, 44, 36, 46, 34]);
+
+      const message = await formatOfRejection(rollback(client, baseOptions()));
+
+      expect(message).toContain('version-number');
+      expect(client.updateDeployment).not.toHaveBeenCalled();
+    });
+
+    it('揺れが収まらなくても version-number が明示されていれば実行し、警告する', async () => {
+      // 戻り先が明示されていれば、揺れの影響は無操作判定と表示上の現在バージョンに留まる。
+      const client = flakyClient([40, 42, 38, 44, 36, 46, 34]);
+
+      const result = await rollback(client, { ...baseOptions(), versionNumber: 10 });
+
+      expect(result.rolledBack).toBe(true);
+      expect(result.toVersion).toBe(10);
+      expect(result.warnings.join('\n')).toContain('安定していません');
+    });
+
+    it('安定している通常のケースでは警告を出さない', async () => {
+      const client = fakeClient();
+
+      const result = await rollback(client, baseOptions());
+
+      expect(result.warnings.join('\n')).not.toContain('安定していません');
     });
   });
 

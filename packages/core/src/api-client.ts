@@ -254,6 +254,21 @@ export class AppsScriptClient {
     return all.map(toDeployment);
   }
 
+  /**
+   * 単一デプロイを取得する。
+   *
+   * deployments.list は書き込み後しばらく複数のレプリカ状態を行き来し、単調ですらない
+   * （実測）。単体取得は同条件で単調に収束したため、特定のデプロイの現在バージョンを
+   * 知りたい場合は一覧ではなくこちらを使う。
+   */
+  async getDeployment(scriptId: string, deploymentId: string): Promise<Deployment> {
+    const result = await this.request(
+      'GET',
+      `/projects/${encodePathSegment(scriptId)}/deployments/${encodePathSegment(deploymentId)}`,
+    );
+    return toDeployment(result as RawDeployment);
+  }
+
   async updateDeployment(
     scriptId: string,
     deploymentId: string,

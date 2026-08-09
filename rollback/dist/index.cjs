@@ -27582,6 +27582,20 @@ var AppsScriptClient = class {
     } while (pageToken !== void 0);
     return all.map(toDeployment);
   }
+  /**
+   * 単一デプロイを取得する。
+   *
+   * deployments.list は書き込み後しばらく複数のレプリカ状態を行き来し、単調ですらない
+   * （実測）。単体取得は同条件で単調に収束したため、特定のデプロイの現在バージョンを
+   * 知りたい場合は一覧ではなくこちらを使う。
+   */
+  async getDeployment(scriptId, deploymentId) {
+    const result = await this.request(
+      "GET",
+      `/projects/${encodePathSegment(scriptId)}/deployments/${encodePathSegment(deploymentId)}`
+    );
+    return toDeployment(result);
+  }
   async updateDeployment(scriptId, deploymentId, versionNumber, description) {
     const result = await this.request(
       "PUT",
@@ -27880,6 +27894,20 @@ function resolveTargets(config, options) {
 
 // packages/core/src/rollback.ts
 var HEAD_NOT_REVERTED_WARNING = "\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u306F\u30C7\u30D7\u30ED\u30A4\u306E\u53C2\u7167\u5148\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u5909\u66F4\u3059\u308B\u3060\u3051\u3067\u3001\u30B9\u30AF\u30EA\u30D7\u30C8\u306E HEAD\uFF08\u30A8\u30C7\u30A3\u30BF\u4E0A\u306E\u30BD\u30FC\u30B9\uFF09\u306F\u5143\u306B\u623B\u308A\u307E\u305B\u3093\u3002\u30EA\u30DD\u30B8\u30C8\u30EA\u5074\u3082 revert \u3057\u306A\u3044\u3068\u3001\u6B21\u56DE\u306E\u30C7\u30D7\u30ED\u30A4\u3067\u554F\u984C\u306E\u3042\u308B\u30B3\u30FC\u30C9\u304C\u518D\u3073\u672C\u756A\u306B\u53CD\u6620\u3055\u308C\u307E\u3059";
+var STABILITY_ATTEMPTS = 6;
+var STABILITY_DELAY_MS = 2e3;
+async function getDeploymentStable(client, scriptId, deploymentId, sleep) {
+  let previous = await client.getDeployment(scriptId, deploymentId);
+  for (let attempt = 1; attempt < STABILITY_ATTEMPTS; attempt += 1) {
+    await sleep(STABILITY_DELAY_MS);
+    const current = await client.getDeployment(scriptId, deploymentId);
+    if (current.versionNumber === previous.versionNumber) {
+      return { deployment: current, stable: true };
+    }
+    previous = current;
+  }
+  return { deployment: previous, stable: false };
+}
 function describeDeployment(deployment) {
   const description = deployment.description ? `: ${deployment.description}` : "";
   return `${deployment.deploymentId} (v${deployment.versionNumber})${description}`;
@@ -27930,8 +27958,24 @@ function resolveTargetDeployment(deployments, deploymentId) {
   return only;
 }
 async function rollback(client, options) {
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const deployments = await client.listDeployments(options.scriptId);
-  const target = resolveTargetDeployment(deployments, options.deploymentId);
+  const resolved = resolveTargetDeployment(deployments, options.deploymentId);
+  const { deployment: target, stable } = await getDeploymentStable(
+    client,
+    options.scriptId,
+    resolved.deploymentId,
+    sleep
+  );
+  if (!stable && options.versionNumber === void 0) {
+    throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u306E\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u78BA\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u8AAD\u307F\u53D6\u308A\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093\uFF09", {
+      nextSteps: [
+        "\u30C7\u30D7\u30ED\u30A4\u306E\u76F4\u5F8C\u306F\u3001Apps Script API \u304C\u3057\u3070\u3089\u304F\u53E4\u3044\u5024\u3092\u8FD4\u3059\u3053\u3068\u304C\u3042\u308A\u307E\u3059",
+        "version-number \u5165\u529B\u3067\u623B\u308A\u5148\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u660E\u793A\u3059\u308C\u3070\u3053\u306E\u554F\u984C\u306E\u5F71\u97FF\u3092\u53D7\u3051\u307E\u305B\u3093\uFF09",
+        "\u6570\u5341\u79D2\u5F85\u3063\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u3082\u89E3\u6D88\u3057\u307E\u3059"
+      ]
+    });
+  }
   const fromVersion = target.versionNumber;
   if (fromVersion === void 0) {
     throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
@@ -27954,9 +27998,14 @@ async function rollback(client, options) {
     toVersion = fromVersion - 1;
   }
   const warnings = [HEAD_NOT_REVERTED_WARNING];
+  if (!stable) {
+    warnings.push(
+      `\u30C7\u30D7\u30ED\u30A4\u306E\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u8AAD\u307F\u53D6\u308A\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093\u3002\u623B\u308A\u5148\u306E v${options.versionNumber} \u306F\u6307\u5B9A\u3069\u304A\u308A\u3067\u3059\u304C\u3001\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3068\u3057\u3066\u8868\u793A\u3057\u3066\u3044\u308B v${fromVersion} \u306F\u5B9F\u969B\u3068\u7570\u306A\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059`
+    );
+  }
   if (toVersion === fromVersion) {
     warnings.push(`\u30C7\u30D7\u30ED\u30A4\u306F\u3059\u3067\u306B v${toVersion} \u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002\u5909\u66F4\u306F\u884C\u3044\u307E\u305B\u3093\u3067\u3057\u305F`);
-    return { rolledBack: false, deploymentId: target.deploymentId, fromVersion, toVersion, warnings };
+    return { rolledBack: false, deploymentId: resolved.deploymentId, fromVersion, toVersion, warnings };
   }
   let version;
   try {
@@ -27981,7 +28030,7 @@ async function rollback(client, options) {
   }
   const result = {
     rolledBack: false,
-    deploymentId: target.deploymentId,
+    deploymentId: resolved.deploymentId,
     fromVersion,
     toVersion,
     warnings
@@ -27992,7 +28041,7 @@ async function rollback(client, options) {
     return result;
   }
   const description = options.description ?? `rollback to v${toVersion} (was v${fromVersion})`;
-  const updated = await client.updateDeployment(options.scriptId, target.deploymentId, toVersion, description);
+  const updated = await client.updateDeployment(options.scriptId, resolved.deploymentId, toVersion, description);
   result.rolledBack = true;
   if (updated.webAppUrl !== void 0) result.webAppUrl = updated.webAppUrl;
   return result;

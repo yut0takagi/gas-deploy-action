@@ -29510,6 +29510,20 @@ var AppsScriptClient = class {
     } while (pageToken !== void 0);
     return all.map(toDeployment);
   }
+  /**
+   * 単一デプロイを取得する。
+   *
+   * deployments.list は書き込み後しばらく複数のレプリカ状態を行き来し、単調ですらない
+   * （実測）。単体取得は同条件で単調に収束したため、特定のデプロイの現在バージョンを
+   * 知りたい場合は一覧ではなくこちらを使う。
+   */
+  async getDeployment(scriptId, deploymentId) {
+    const result = await this.request(
+      "GET",
+      `/projects/${encodePathSegment(scriptId)}/deployments/${encodePathSegment(deploymentId)}`
+    );
+    return toDeployment(result);
+  }
   async updateDeployment(scriptId, deploymentId, versionNumber, description) {
     const result = await this.request(
       "PUT",
