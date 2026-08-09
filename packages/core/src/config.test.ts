@@ -153,6 +153,28 @@ projects: {}
     expect((error as GasDeployError).message).toContain('projects');
   });
 
+  it('rejects a purely numeric project name', () => {
+    // JS のオブジェクトキーは整数のみの文字列を挿入順と無関係に先頭へ並べ替えるため、
+    // "0" のようなプロジェクト名はデプロイ順序を静かに壊す。設定の時点で弾く。
+    const yaml = `
+version: 1
+projects:
+  "0":
+    rootDir: apps/zero/dist
+    environments:
+      prod:
+        scriptId: abc123
+`;
+    let error: unknown;
+    try {
+      parseConfig(yaml);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect((error as GasDeployError).message).toContain('projects.0');
+  });
+
   it('rejects a missing rootDir, naming the path', () => {
     const yaml = `
 version: 1
@@ -239,16 +261,55 @@ describe('resolveTargets', () => {
     ]);
   });
 
-  it('skips a project that has no dev environment', () => {
+  it('skips a project that has no dev environment when sweeping all (projects: undefined)', () => {
+    // Fix 1 のガード: 一括デプロイでは環境が無いプロジェクトはスキップされ、エラーにならない。
     const targets = resolveTargets(config, { environment: 'dev', projects: undefined, env: FULL_ENV });
     expect(targets).toHaveLength(1);
     expect(targets[0]?.project).toBe('web-app');
+  });
+
+  it('skips a project that has no dev environment when sweeping all (projects: ["all"])', () => {
+    // Fix 1 のガード: projects: ["all"] も未指定と同じく一括デプロイなので、同様にスキップされる。
+    const targets = resolveTargets(config, { environment: 'dev', projects: ['all'], env: FULL_ENV });
+    expect(targets).toHaveLength(1);
+    expect(targets[0]?.project).toBe('web-app');
+  });
+
+  it('throws when an explicitly named project does not define the requested environment', () => {
+    // sheet-tools は prod のみを定義しており、dev を持たない。
+    let error: unknown;
+    try {
+      resolveTargets(config, { environment: 'dev', projects: ['sheet-tools'], env: FULL_ENV });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(GasDeployError);
+    const message = (error as GasDeployError).message;
+    expect(message).toContain('sheet-tools');
+    expect(message).toContain('dev');
+    expect(message).toContain('prod'); // sheet-tools が実際に定義している環境
+  });
+
+  it('resolves normally when every explicitly named project defines the requested environment', () => {
+    const targets = resolveTargets(config, { environment: 'prod', projects: ['web-app', 'sheet-tools'], env: FULL_ENV });
+    expect(targets.map((t) => t.project)).toEqual(['web-app', 'sheet-tools']);
   });
 
   it('treats projects: ["all"] the same as undefined', () => {
     const withUndefined = resolveTargets(config, { environment: 'prod', projects: undefined, env: FULL_ENV });
     const withAll = resolveTargets(config, { environment: 'prod', projects: ['all'], env: FULL_ENV });
     expect(withAll).toEqual(withUndefined);
+  });
+
+  it('throws when "all" is combined with individual project names', () => {
+    let error: unknown;
+    try {
+      resolveTargets(config, { environment: 'prod', projects: ['all', 'web-app'], env: FULL_ENV });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect((error as GasDeployError).message).toContain('all');
   });
 
   it('throws a GasDeployError listing real environments when none defines the requested one', () => {

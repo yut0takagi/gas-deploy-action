@@ -119,6 +119,17 @@ export function parseConfig(yamlText: string): GasDeployConfig {
   const projects: Record<string, ProjectConfig> = {};
   for (const name of projectNames) {
     const projectPath = `projects.${name}`;
+
+    // resolveTargets はプロジェクトの宣言順を Object.keys() で復元する。JS のオブジェクトキーは
+    // 整数のみの文字列（"0", "12" など）を挿入順とは無関係に昇順で先頭に並べ替えるため、
+    // そのような名前を許すとデプロイ順序が静かに壊れる。Map への作り替えではなく、
+    // 入力側でこのクラスの名前を弾く。
+    if (/^\d+$/.test(name)) {
+      fail(projectPath, '数字のみのプロジェクト名は使用できません（デプロイ順序が壊れるため）', [
+        '名前に数字以外の文字を1つ以上含めてください（例: "0" ではなく "project-0"）',
+      ]);
+    }
+
     const projectRaw = projectsRaw[name];
     if (!isPlainObject(projectRaw)) {
       fail(projectPath, 'プロジェクト定義はマップである必要があります', [
@@ -261,9 +272,17 @@ export function expandVariables(value: string, env: Record<string, string | unde
 /**
  * 指定された environment / projects に対してデプロイ対象を解決する。
  *
- * - `projects` が未指定または `['all']` のときは全プロジェクトが対象。
- * - ある environment を持たないプロジェクトはスキップする（エラーにしない）。
- * - config 全体を見てもその environment を持つプロジェクトが1つも無ければエラー。
+ * - `projects` が未指定または `['all']` のときは全プロジェクトが対象（一括デプロイ）。
+ *   `"all"` を個別のプロジェクト名と混ぜて渡すことはできない（エラー）。
+ * - 一括デプロイでは、ある environment を持たないプロジェクトはスキップする（エラーにしない）。
+ *   共有 config を横断デプロイする以上、一部のプロジェクトが特定の環境を持たないのは正常。
+ * - 明示的にプロジェクト名を指定した場合は、そのプロジェクトは指定した environment を
+ *   必ず持っていなければならない。持っていなければエラー（プロジェクト名・要求した
+ *   environment・そのプロジェクトが実際に持つ environment を列挙する）。ユーザーが
+ *   プロジェクトと environment の両方を名指しした以上、組み合わせが存在しないのは
+ *   ほぼ確実にタイプミスであり、黙って何もデプロイしない結果は許容しない。
+ * - config 全体を見てもその environment を持つプロジェクトが1つも無ければエラー
+ *   （一括デプロイ・明示指定のどちらでも、これは environment 名自体のタイプミスを示す）。
  * - 明示的に指定されたプロジェクト名が config に存在しなければエラー。
  * - 返す順序は `projects` オプションの並びではなく、常に gasdeploy.yml での宣言順。
  *   デプロイ順序はユーザーが YAML 内でのプロジェクトの並びによって制御する。
@@ -277,6 +296,19 @@ export function resolveTargets(config: GasDeployConfig, options: ResolveTargetsO
     includedNames = allProjectNames;
   } else {
     const requested = options.projects ?? [];
+
+    // "all" は「他の全プロジェクトも対象にする」という意味ではなく、単独でのみ意味を持つ
+    // 特別な値。個別名と混ぜて渡すのは設定ミスであり、"unknown project: all" という
+    // 分かりにくいエラーではなく、意図を汲んだ専用のエラーにする。
+    if (requested.includes('all')) {
+      throw new GasDeployError('projects に "all" と個別のプロジェクト名を同時に指定することはできません', {
+        nextSteps: [
+          '全プロジェクトを対象にする場合は projects: ["all"]（または projects を省略）としてください',
+          '特定のプロジェクトのみを対象にする場合は "all" を含めず個別の名前だけを指定してください',
+        ],
+      });
+    }
+
     const unknown = requested.filter((name) => !allProjectNames.includes(name));
     if (unknown.length > 0) {
       throw new GasDeployError(`指定されたプロジェクトが見つかりません: ${unknown.join(', ')}`, {
@@ -317,7 +349,27 @@ export function resolveTargets(config: GasDeployConfig, options: ResolveTargetsO
     if (project === undefined) continue;
 
     const envConfig = project.environments[options.environment];
-    if (envConfig === undefined) continue; // Rule 1: このプロジェクトは対象 environment を持たない → スキップ
+    if (envConfig === undefined) {
+      if (isAll) {
+        // Rule 1: all（または未指定）による一括デプロイでは、対象 environment を
+        // 持たないプロジェクトはスキップする。共有 config を横断デプロイする以上、
+        // 一部のプロジェクトが特定の環境を持たないのは正常な状態だから。
+        continue;
+      }
+      // 明示的に名指しされたプロジェクトの場合はスキップしない。ユーザーがそのプロジェクトと
+      // その environment の両方を名指しした以上、組み合わせが存在しないのはほぼ確実に
+      // タイプミスであり、静かに何もデプロイしない結果は Rule 3 が防ごうとした事故そのもの。
+      const definedEnvironments = Object.keys(project.environments).sort();
+      throw new GasDeployError(
+        `${projectName} は ${options.environment} を定義していません（定義済み: ${definedEnvironments.join(', ')}）`,
+        {
+          nextSteps: [
+            `projects.${projectName}.environments に ${options.environment} を追加してください`,
+            `environment の指定が正しいか確認してください（${projectName} が定義する環境: ${definedEnvironments.join(', ')}）`,
+          ],
+        },
+      );
+    }
 
     const ignore = project.ignore ?? config.defaults?.ignore ?? [];
 
