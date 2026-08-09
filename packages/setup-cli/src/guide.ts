@@ -1,9 +1,17 @@
 import { createInterface } from 'node:readline/promises';
-import { REQUESTED_SCOPES } from '@gas-deploy/core';
+import { GasDeployError, REQUESTED_SCOPES } from '@gas-deploy/core';
 
 export type AccountType = 'workspace' | 'personal';
 
 const SCOPE_LIST = REQUESTED_SCOPES.split(' ');
+
+/** 空欄・非対話環境からの入力に対する再試行回数の上限。標準入力が閉じている場合に無限ループしないための保険。 */
+const MAX_PROMPT_ATTEMPTS = 3;
+
+const NON_INTERACTIVE_NEXT_STEPS = [
+  'このコマンドは対話的なターミナルからの入力を必要とします',
+  '標準入力を /dev/null にリダイレクトしたり、パイプや非対話的なスクリプト・CI から実行しないでください',
+];
 
 /**
  * ステップ1: アカウントの種類。
@@ -121,4 +129,49 @@ export async function promptInput(question: string): Promise<string> {
   } finally {
     rl.close();
   }
+}
+
+/**
+ * 空欄を許さない入力を読み取る。空欄（空白のみを含む）が返ってきた場合は再プロンプトし、
+ * 最大 `MAX_PROMPT_ATTEMPTS` 回で諦めて `GasDeployError` を投げる。
+ *
+ * 標準入力が閉じている・非対話的にリダイレクトされている場合、`promptInputImpl` は毎回
+ * 即座に空文字列を返す。ここで弾かなければ、クライアント ID が空のまま認可 URL の構築や
+ * ブラウザ起動に進んでしまい、ずっと後になってから分かりにくい OAuth エラーとして表面化する。
+ */
+export async function promptRequiredInput(
+  question: string,
+  promptInputImpl: (question: string) => Promise<string> = promptInput,
+): Promise<string> {
+  let currentQuestion = question;
+  for (let attempt = 1; attempt <= MAX_PROMPT_ATTEMPTS; attempt++) {
+    const answer = (await promptInputImpl(currentQuestion)).trim();
+    if (answer.length > 0) {
+      return answer;
+    }
+    currentQuestion = `(空欄は使えません。もう一度入力してください)\n${question}`;
+  }
+  throw new GasDeployError('必須の入力が得られませんでした', {
+    nextSteps: NON_INTERACTIVE_NEXT_STEPS,
+  });
+}
+
+/**
+ * ステップ1の回答（アカウント種別）を読み取る。`1` か `2` 以外（空欄を含む）は再プロンプトし、
+ * `promptRequiredInput` と同じ上限・同じ理由で `GasDeployError` を投げる。
+ */
+export async function promptAccountType(
+  promptInputImpl: (question: string) => Promise<string> = promptInput,
+): Promise<AccountType> {
+  const baseQuestion = '番号を入力してください (1 または 2): ';
+  let currentQuestion = baseQuestion;
+  for (let attempt = 1; attempt <= MAX_PROMPT_ATTEMPTS; attempt++) {
+    const answer = (await promptInputImpl(currentQuestion)).trim();
+    if (answer === '1') return 'workspace';
+    if (answer === '2') return 'personal';
+    currentQuestion = `(「1」または「2」のいずれかを入力してください)\n${baseQuestion}`;
+  }
+  throw new GasDeployError('必須の入力（1 または 2）が得られませんでした', {
+    nextSteps: NON_INTERACTIVE_NEXT_STEPS,
+  });
 }

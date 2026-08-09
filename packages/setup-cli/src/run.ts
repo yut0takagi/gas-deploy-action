@@ -8,8 +8,9 @@ import {
   enableApiStep,
   oauthClientStep,
   projectStep,
+  promptAccountType,
   promptInput,
-  type AccountType,
+  promptRequiredInput,
 } from './guide.js';
 import {
   buildAuthorizationUrl,
@@ -24,6 +25,13 @@ import { verifyCredentials } from './verify.js';
 const DEFAULT_SECRET_NAME = 'GAS_DEPLOY_CREDENTIALS';
 const DEFAULT_CREDENTIALS_PATH = './gas-deploy-credentials.json';
 
+const NON_INTERACTIVE_NEXT_STEPS = [
+  'このコマンドはターミナルから対話的に実行してください',
+  '標準入力のリダイレクトやパイプ、CI などの非対話環境からの実行はできません',
+];
+
+type WriteFileImpl = (path: string, data: string) => Promise<void>;
+
 export interface RunSetupOptions {
   /** テスト・デバッグ用の差し替え。既定はグローバルの fetch。 */
   fetchImpl?: typeof fetch;
@@ -33,6 +41,15 @@ export interface RunSetupOptions {
   promptInputImpl?: (question: string) => Promise<string>;
   /** ブラウザ起動・gh 呼び出しに使う execFile。既定は node:child_process の execFile。 */
   execFileImpl?: typeof execFile;
+  /**
+   * 対話端末かどうか。既定は `process.stdin.isTTY`。
+   * テストで非対話チェックを迂回する場合にのみ上書きする。
+   */
+  isTTY?: boolean;
+  /** ブラウザ起動コマンドの選択に使うプラットフォーム。既定は `process.platform`。テスト用の差し替え。 */
+  platform?: NodeJS.Platform;
+  /** 認証情報ファイルの書き出し。既定は node:fs/promises の writeFile（utf8）。テスト用の差し替え。 */
+  writeFileImpl?: WriteFileImpl;
 }
 
 interface ResolvedOptions {
@@ -40,6 +57,9 @@ interface ResolvedOptions {
   log: (message: string) => void;
   promptInputImpl: (question: string) => Promise<string>;
   execFileImpl: typeof execFile;
+  isTTY: boolean;
+  platform: NodeJS.Platform;
+  writeFileImpl: WriteFileImpl;
 }
 
 function resolveOptions(options: RunSetupOptions): ResolvedOptions {
@@ -48,6 +68,9 @@ function resolveOptions(options: RunSetupOptions): ResolvedOptions {
     log: options.log ?? ((message: string) => console.log(message)),
     promptInputImpl: options.promptInputImpl ?? promptInput,
     execFileImpl: options.execFileImpl ?? execFile,
+    isTTY: options.isTTY ?? process.stdin.isTTY === true,
+    platform: options.platform ?? process.platform,
+    writeFileImpl: options.writeFileImpl ?? ((path, data) => writeFile(path, data, 'utf8')),
   };
 }
 
@@ -58,14 +81,23 @@ function execFilePromise(execFileImpl: typeof execFile, command: string, args: s
 }
 
 /**
+ * プラットフォームからブラウザ起動コマンドを決定する純粋関数（テスト用に export）。
+ * darwin は `open`、win32 は `start`（cmd 組み込みコマンドの慣例的な呼び出し方に合わせ、
+ * 第一引数を空のタイトルとして渡す）、それ以外は `xdg-open` を使う。
+ */
+export function resolveBrowserCommand(platform: NodeJS.Platform, url: string): [string, string[]] {
+  if (platform === 'darwin') return ['open', [url]];
+  if (platform === 'win32') return ['start', ['', url]];
+  return ['xdg-open', [url]];
+}
+
+/**
  * ブラウザを開く。失敗してもプロセスを止めない設計にする — URL を表示して手動で開いてもらえば
  * 済むため、ブラウザを起動できないこと自体は致命的な失敗ではない
  * （execFile が使えない環境やヘッドレス環境で setup-cli 全体が死ぬのを避ける）。
  */
-function openBrowser(execFileImpl: typeof execFile, url: string): Promise<boolean> {
-  const platform = process.platform;
-  const [command, args]: [string, string[]] =
-    platform === 'darwin' ? ['open', [url]] : platform === 'win32' ? ['start', ['', url]] : ['xdg-open', [url]];
+function openBrowser(execFileImpl: typeof execFile, platform: NodeJS.Platform, url: string): Promise<boolean> {
+  const [command, args] = resolveBrowserCommand(platform, url);
   return execFilePromise(execFileImpl, command, args);
 }
 
@@ -111,7 +143,7 @@ function toMinimalJson(credentials: Credentials): string {
 }
 
 async function offerPersistence(resolved: ResolvedOptions, credentials: Credentials): Promise<void> {
-  const { log, promptInputImpl, execFileImpl } = resolved;
+  const { log, promptInputImpl, execFileImpl, writeFileImpl } = resolved;
 
   const answer = await promptInputImpl('\nこの認証情報を GitHub Secrets に登録しますか？ (Y/n): ');
   if (/^n/i.test(answer.trim())) {
@@ -133,7 +165,7 @@ async function offerPersistence(resolved: ResolvedOptions, credentials: Credenti
     `代わりに認証情報をファイルに書き出します。保存先のパスを入力してください (既定: ${DEFAULT_CREDENTIALS_PATH}): `,
   );
   const path = pathRaw.trim() || DEFAULT_CREDENTIALS_PATH;
-  await writeFile(path, toMinimalJson(credentials), 'utf8');
+  await writeFileImpl(path, toMinimalJson(credentials));
   log(
     [
       `認証情報を ${path} に書き出しました。`,
@@ -150,19 +182,27 @@ async function offerPersistence(resolved: ResolvedOptions, credentials: Credenti
  */
 export async function runSetup(options: RunSetupOptions = {}): Promise<void> {
   const resolved = resolveOptions(options);
-  const { fetchImpl, log, promptInputImpl, execFileImpl } = resolved;
+  const { fetchImpl, log, promptInputImpl, execFileImpl, platform } = resolved;
+
+  // このコマンドは本質的に対話的（ブラウザでの認可・複数の入力）であり、完走できるはずのない
+  // フローを何ステップも進めてから失敗させるより、最初に対話端末が無いと分かった時点で
+  // 明確に失敗させる方が親切。
+  if (!resolved.isTTY) {
+    throw new GasDeployError('対話的なターミナルが必要です', {
+      nextSteps: NON_INTERACTIVE_NEXT_STEPS,
+    });
+  }
 
   log(accountTypeStep());
-  const accountTypeAnswer = await promptInputImpl('番号を入力してください (1 または 2): ');
-  const accountType: AccountType = accountTypeAnswer.trim() === '1' ? 'workspace' : 'personal';
+  const accountType = await promptAccountType(promptInputImpl);
 
   log('\n' + projectStep());
   log('\n' + enableApiStep());
   log('\n' + consentScreenStep(accountType));
   log('\n' + oauthClientStep());
 
-  const clientId = (await promptInputImpl('\nクライアント ID: ')).trim();
-  const clientSecret = (await promptInputImpl('クライアント シークレット: ')).trim();
+  const clientId = await promptRequiredInput('\nクライアント ID: ', promptInputImpl);
+  const clientSecret = await promptRequiredInput('クライアント シークレット: ', promptInputImpl);
 
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
@@ -175,7 +215,7 @@ export async function runSetup(options: RunSetupOptions = {}): Promise<void> {
       redirectUri = `http://127.0.0.1:${port}/`;
       const authorizationUrl = buildAuthorizationUrl({ clientId, redirectUri, state, codeChallenge });
       log(`\n次の URL をブラウザで開いて認可してください:\n${authorizationUrl}\n`);
-      void openBrowser(execFileImpl, authorizationUrl).then((opened) => {
+      void openBrowser(execFileImpl, platform, authorizationUrl).then((opened) => {
         if (!opened) {
           log('ブラウザを自動的に開けませんでした。上記の URL を手動でブラウザに貼り付けて開いてください。');
         }

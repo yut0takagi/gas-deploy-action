@@ -1,6 +1,14 @@
-import { REQUESTED_SCOPES } from '@gas-deploy/core';
-import { describe, expect, it } from 'vitest';
-import { accountTypeStep, consentScreenStep, enableApiStep, oauthClientStep, projectStep } from './guide.js';
+import { GasDeployError, REQUESTED_SCOPES } from '@gas-deploy/core';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  accountTypeStep,
+  consentScreenStep,
+  enableApiStep,
+  oauthClientStep,
+  projectStep,
+  promptAccountType,
+  promptRequiredInput,
+} from './guide.js';
 
 const [SCOPE_PROJECTS, SCOPE_DEPLOYMENTS] = REQUESTED_SCOPES.split(' ');
 
@@ -74,5 +82,70 @@ describe('oauthClientStep', () => {
     expect(text).toContain('Desktop');
     expect(text).toContain('クライアント ID');
     expect(text).toContain('クライアント シークレット');
+  });
+});
+
+/** vi.fn 版の promptInputImpl。渡した配列を順番に返し、尽きたら例外を投げる。 */
+function scripted(answers: string[]) {
+  const queue = [...answers];
+  return vi.fn(async () => {
+    if (queue.length === 0) throw new Error('scripted() called more times than answers provided');
+    return queue.shift()!;
+  });
+}
+
+describe('promptRequiredInput', () => {
+  it('returns the value once a non-empty answer is given', async () => {
+    const promptInputImpl = scripted(['value']);
+    await expect(promptRequiredInput('Q: ', promptInputImpl)).resolves.toBe('value');
+    expect(promptInputImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-prompts on an empty answer and returns the next valid one', async () => {
+    const promptInputImpl = scripted(['', 'value']);
+    await expect(promptRequiredInput('Q: ', promptInputImpl)).resolves.toBe('value');
+    expect(promptInputImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a whitespace-only answer as empty', async () => {
+    const promptInputImpl = scripted(['   \t  ', 'value']);
+    await expect(promptRequiredInput('Q: ', promptInputImpl)).resolves.toBe('value');
+    expect(promptInputImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws a GasDeployError after three consecutive empty answers', async () => {
+    const promptInputImpl = scripted(['', '', '']);
+    await expect(promptRequiredInput('Q: ', promptInputImpl)).rejects.toThrow(GasDeployError);
+    expect(promptInputImpl).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('promptAccountType', () => {
+  it('returns workspace for "1"', async () => {
+    const promptInputImpl = scripted(['1']);
+    await expect(promptAccountType(promptInputImpl)).resolves.toBe('workspace');
+  });
+
+  it('returns personal for "2"', async () => {
+    const promptInputImpl = scripted(['2']);
+    await expect(promptAccountType(promptInputImpl)).resolves.toBe('personal');
+  });
+
+  it('rejects "3" and re-prompts until a valid answer arrives', async () => {
+    const promptInputImpl = scripted(['3', '2']);
+    await expect(promptAccountType(promptInputImpl)).resolves.toBe('personal');
+    expect(promptInputImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an empty answer the same way as an invalid one', async () => {
+    const promptInputImpl = scripted(['', '1']);
+    await expect(promptAccountType(promptInputImpl)).resolves.toBe('workspace');
+    expect(promptInputImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws a GasDeployError after three consecutive invalid answers', async () => {
+    const promptInputImpl = scripted(['3', 'x', '']);
+    await expect(promptAccountType(promptInputImpl)).rejects.toThrow(GasDeployError);
+    expect(promptInputImpl).toHaveBeenCalledTimes(3);
   });
 });
