@@ -47,7 +47,14 @@ jobs:
           set -e
           echo "$OUTPUT"
           # 入力が無いので必ず失敗する。重要なのは「どう失敗したか」。
-          if echo "$OUTPUT" | grep -q "Input required and not supplied"; then
+          #
+          # 我々のエラー処理まで到達していれば @actions/core が ::error:: を出力する。
+          # モジュール形式の不一致や依存関係の欠落では、そこへ到達する前に Node が
+          # 生のエラーを吐いて終わる。
+          #
+          # 特定のメッセージ文字列で判定しないこと。入力仕様が変わるたびに壊れる。
+          if echo "$OUTPUT" | grep -q "::error::" \
+             && ! echo "$OUTPUT" | grep -qE "ReferenceError|SyntaxError|Cannot find module|is not defined"; then
             echo "バンドルは正常に読み込まれ、想定どおり入力不足で停止しました"
           else
             echo "::error::バンドルの起動に失敗しました。モジュール形式や依存関係の問題の可能性があります"

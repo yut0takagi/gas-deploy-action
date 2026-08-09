@@ -114,6 +114,72 @@ clasp のトークンは `cloud-platform` を含む広いスコープを要求�
 - `https://www.googleapis.com/auth/script.projects`
 - `https://www.googleapis.com/auth/script.deployments`
 
+## 複数プロジェクトをまとめてデプロイする
+
+1リポジトリに複数の GAS プロジェクトを置き、環境（dev / stg / prod）ごとにデプロイできる。リポジトリ直下に `gasdeploy.yml` を置く。
+
+```yaml
+version: 1
+
+defaults:
+  ignore:
+    - "**/*.test.js"
+    - "node_modules/**"
+
+projects:
+  web-app:
+    rootDir: apps/web-app/dist
+    type: webapp
+    environments:
+      dev:
+        scriptId: ${DEV_WEBAPP_SCRIPT_ID}
+      prod:
+        scriptId: ${PROD_WEBAPP_SCRIPT_ID}
+        deploymentId: ${PROD_WEBAPP_DEPLOYMENT_ID}
+
+  sheet-tools:
+    rootDir: apps/sheet-tools/dist
+    type: bound
+    environments:
+      prod:
+        scriptId: ${SHEET_TOOLS_SCRIPT_ID}
+```
+
+```yaml
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          environment: prod
+        env:
+          PROD_WEBAPP_SCRIPT_ID: ${{ secrets.PROD_WEBAPP_SCRIPT_ID }}
+          PROD_WEBAPP_DEPLOYMENT_ID: ${{ secrets.PROD_WEBAPP_DEPLOYMENT_ID }}
+          SHEET_TOOLS_SCRIPT_ID: ${{ secrets.SHEET_TOOLS_SCRIPT_ID }}
+```
+
+`projects` 入力で対象を絞れる（例 `projects: web-app,sheet-tools`）。既定は `all`。
+
+### `${VAR}` は GitHub Actions の式ではない
+
+`gasdeploy.yml` はリポジトリ内のただの YAML なので、`${{ }}` は展開されない。そこで本 Action が `${VAR}` を**環境変数から**展開する。上の例のように `env:` で渡すこと。scriptId をリポジトリに直書きしたくない場合に使う。
+
+**未定義の変数はエラーになる。** 空文字のまま進めると、空の scriptId で API を叩いて意味不明な 404 になるため、設定を読んだ時点で失敗させる。
+
+### 失敗したときに何が起きるか
+
+**逐次実行し、最初の失敗で停止する。** 並列にしないのは、API のレート制限と、失敗時にどこまで進んだか分からなくなるのを避けるため。
+
+停止した場合、**どのプロジェクトが完了済みで、どれが未着手か**をサマリに明記する。`deployments` 出力にも全ターゲットが `status`（`deployed` / `unchanged` / `failed` / `skipped`）付きで含まれるので、赤いジョブを見た人が Apps Script のコンソールを開かずに現状を把握できる。
+
+### 単一プロジェクトモードとの関係
+
+**`script-id` 入力があれば設定ファイルは完全に無視される。** 両方を混ぜると挙動が読めなくなるため。既存の単一プロジェクトの使い方はそのまま動く。
+
+### 環境が無いプロジェクトの扱い
+
+`projects: all` で走らせたとき、指定した環境を持たないプロジェクトは**スキップされる**（`prod` しか持たないプロジェクトがあってよい）。
+
+ただし **プロジェクト名を明示して指定した場合は、環境が無ければエラー**になる。名指しした対象がデプロイされないまま成功と表示されるのを防ぐため。
+
 ## 入力（`deploy/action.yml`）
 
 | 入力 | 必須 | 既定値 | 説明 |
