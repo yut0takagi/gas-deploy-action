@@ -307,3 +307,29 @@ clasp v3 には **`clasp status --json`** がある。push 対象のファイル
 ```
 
 現在の実装はこの対応表をハードコードしている。既定値とは一致するが、`filePushOrder`（push 順序の制御。GAS ではトップレベル文の評価順に影響しうる）と併せて、対応するかどうかを判断する必要がある。v0.1 では非対応とし README に明記するのが妥当。
+
+---
+
+## PR コメント（`comment-on-pr`）の実 API 検証（2026-08-10）
+
+`yut0takagi/gas-deploy-action` に一時 PR（#2、検証後クローズ）を作り、`upsertComment` を実際の GitHub REST API に対して実行した。
+
+| 確認項目 | 結果 |
+|---|---|
+| マーカーが無い状態で `created` になる | OK |
+| 2回目の呼び出しが `updated` になる | OK |
+| 更新先が1回目と同じコメント ID | OK（`5234381358`） |
+| 別キーは別コメントとして `created` | OK（`5234381461`） |
+| 実行後に残るコメントは2件のみ（積み上がらない） | OK |
+| 更新後の本文が2回目の内容になっている | OK |
+| 本文にトークンが混入しない | OK |
+
+エンドポイントと応答形はいずれも想定どおり。
+
+- `GET /repos/{owner}/{repo}/issues/{n}/comments` → `[{id, body, ...}]`
+- `POST /repos/{owner}/{repo}/issues/{n}/comments` → `{id, ...}`（201）
+- `PATCH /repos/{owner}/{repo}/issues/comments/{id}` → `{id, ...}`（200）
+
+**未検証**: 403（`pull-requests: write` 不足、およびフォークからの `pull_request` で `GITHUB_TOKEN` が読み取り専用になるケース）。検証には権限を絞ったトークンが必要で、今回は `gh auth token`（フル権限のユーザートークン）を使ったため通っていない。エラー分類そのものはユニットテストで固定してある。
+
+**未検証**: 100件を超えるコメントを持つ PR でのページング。ユニットテストではモックで再現しているが、実 API では未確認。
