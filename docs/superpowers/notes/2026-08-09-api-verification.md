@@ -138,6 +138,37 @@ tokens: object
 
 実測した挙動は `ignore.test.ts` に回帰テストとして固定済み。picomatch のバージョンアップで黙って乖離することを防ぐ。
 
+## Web アプリの URL 維持（実測）— 目玉機能の実証
+
+`deployment-id` による URL 維持は本 Action の中心的な安全機能でありながら、standalone プロジェクトでしか検証していなかった。`entryPoints` が空のため **`web-app-url` 出力は一度も値を返したことがなかった**。
+
+`webapp` 設定（`executeAs: USER_DEPLOYING` / `access: MYSELF`）を持つマニフェストと `doGet` を用意し、本実装で3段階のデプロイを実行した。
+
+```
+[1] deployment-id 無し
+    webAppUrl = https://script.google.com/macros/s/AKfycbxDPA1HGN.../exec
+    警告: URL が変わります / リモートの 5 件のうち 3 件が削除されます
+
+[2] 同じ deployment-id を指定
+    webAppUrl = （[1] と完全に同一）
+    警告: なし
+
+[3] deployment-id 無しで再デプロイ
+    webAppUrl = https://script.google.com/macros/s/AKfycbz7v0iXe1.../exec  ← 別 URL
+    警告: URL が変わります
+```
+
+確認できたこと:
+
+- **`deployment-id` を指定すれば URL は維持される。** `deployments.update` が既存のエントリポイントを保つ
+- **指定しなければ URL は実際に変わる。** 警告は経験的に正しい。稼働中の Web アプリを孤立させる事故は実在する
+- **`entryPoints` から `webAppUrl` を抽出する処理が正しく動く。** この経路は実装以来一度も実行されていなかった
+- **大量削除の警告が実環境で発火した**（リモート5件のうち3件削除＝60%、閾値50%）。閾値の設定が妥当であることの傍証
+
+未検証のまま残るのは Workspace アドオンとしてのデプロイ。API 呼び出しは Web アプリと同じ経路であり、差は `appsscript.json` の構成のみ。
+
+---
+
 ## スコープの絞り込み（実測）— #2 の決着
 
 **当初の実装は「最小権限」を謳いながら、実際には clasp の広いスコープをそのまま使っていた。**

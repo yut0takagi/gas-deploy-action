@@ -75,6 +75,14 @@ OAuth 同意画面が **テスト（Testing）** 状態のままだと、発行�
 
 clasp のトークンは `cloud-platform` を含む広いスコープを要求する。本 Action が実際に要求するスコープは次の2つのみで、`.clasprc.json` から必要な分だけを使う。
 
+> ⚠️ **ただしリフレッシュトークン自体の権限は狭まらない。**
+>
+> 本 Action が絞っているのは、リフレッシュトークンと交換して得る**アクセストークン**のスコープである。Secrets に保存されるリフレッシュトークンは、clasp がユーザーに認可された時点の権限（13スコープ）をそのまま持ち続ける。
+>
+> したがって **Secrets が漏洩した場合、攻撃者は同じリフレッシュトークンで `cloud-platform` を含む全スコープのアクセストークンを取得できる。** 「本 Action は2スコープしか使わない」ことと「漏洩時の被害が2スコープ分に収まる」ことは別である。
+>
+> 真の最小権限を得るには、最初から2スコープだけを認可した専用の OAuth クライアントでトークンを発行する必要がある。それを行う `setup-cli` は v1.0 で提供予定。それまでは、Secrets の管理と、不要になったトークンの失効（[Google アカウントのセキュリティ設定](https://myaccount.google.com/permissions)）で担保すること。
+
 - `https://www.googleapis.com/auth/script.projects`
 - `https://www.googleapis.com/auth/script.deployments`
 
