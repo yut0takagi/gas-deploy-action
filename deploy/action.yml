@@ -60,7 +60,12 @@ outputs:
   summary:
     description: '人間可読のサマリ（Markdown）'
   deployments:
-    description: '複数プロジェクトモードでの各プロジェクトの結果（JSON 配列: project, environment, scriptId, changed, versionNumber, deploymentId, webAppUrl）'
+    description: >-
+      複数プロジェクトモードでの各プロジェクトの結果（JSON 配列）。対象になったプロジェクトは
+      失敗・未実行のものも含めて必ず1件ずつ含まれ、欠けることはありません。各要素は
+      project, environment, scriptId, status（deployed | unchanged | failed | skipped の
+      いずれか）を持ち、該当する場合のみ versionNumber, deploymentId, webAppUrl, error
+      （failed のときのみ、失敗メッセージ）を含みます。
 
 runs:
   using: 'node24'
