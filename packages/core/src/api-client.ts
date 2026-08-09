@@ -1,5 +1,5 @@
 import { GasDeployError, classifyApiError } from './errors.js';
-import type { Deployment, ScriptFile } from './types.js';
+import type { Deployment, ScriptFile, Version } from './types.js';
 
 const BASE_URL = 'https://script.googleapis.com/v1';
 const MANIFEST_FILE_NAME = 'appsscript';
@@ -195,6 +195,28 @@ export class AppsScriptClient {
       });
     }
     return result.versionNumber;
+  }
+
+  /**
+   * 単一バージョンの情報を取得する。存在しなければ 404 の `GasDeployError` を投げる。
+   *
+   * 一覧（versions.list）ではなく単体取得なのは、CI が毎回バージョンを作る運用では
+   * バージョンが数百件に達し、一覧の走査が「1件を確認したいだけ」の操作に見合わないため。
+   */
+  async getVersion(scriptId: string, versionNumber: number): Promise<Version> {
+    const result = (await this.request(
+      'GET',
+      `/projects/${encodePathSegment(scriptId)}/versions/${encodePathSegment(String(versionNumber))}`,
+    )) as { versionNumber?: number; description?: string; createTime?: string };
+
+    const version: Version = { versionNumber: result.versionNumber ?? versionNumber };
+    if (result.description !== undefined) {
+      version.description = result.description;
+    }
+    if (result.createTime !== undefined) {
+      version.createTime = result.createTime;
+    }
+    return version;
   }
 
   async listDeployments(scriptId: string): Promise<Deployment[]> {
