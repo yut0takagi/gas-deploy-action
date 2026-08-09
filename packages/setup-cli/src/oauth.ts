@@ -129,7 +129,7 @@ export interface WaitForAuthorizationCodeOptions {
 
 /**
  * ループバック HTTP サーバーを起動し、Google からのリダイレクトを待って認可コードを返す。
- * 127.0.0.1 に明示的にバインドする — `localhost` は `::1` に解決されうり登録した
+ * 127.0.0.1 に明示的にバインドする — `localhost` は `::1` に解決されることがあり登録した
  * redirect_uri と食い違う可能性があり、`0.0.0.0` はコールバックをネットワークに晒してしまう。
  */
 export function waitForAuthorizationCode(options: WaitForAuthorizationCodeOptions): Promise<string> {
