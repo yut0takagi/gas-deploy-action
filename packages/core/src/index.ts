@@ -9,3 +9,4 @@ export * from './file-collector.js';
 export * from './differ.js';
 export * from './api-client.js';
 export * from './deployer.js';
+export * from './config.js';

@@ -3,9 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
-    "picomatch": "^4.0.2"
+    "picomatch": "^4.0.2",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/picomatch": "^3.0.1"
