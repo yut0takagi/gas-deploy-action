@@ -193,6 +193,9 @@ projects:
 | `dry-run` | — | `false` | 差分の表示のみ行い、書き込みを行わない |
 | `create-version` | — | `true` | バージョン作成とデプロイを行うかどうか |
 | `description` | — | `ci-<sha7>-<run_number>` | バージョンの説明 |
+| `comment-on-pr` | — | `false` | サマリを PR にコメントする |
+| `github-token` | — | `${{ github.token }}` | PR コメントに使うトークン |
+| `comment-key` | — | environment または `default` | コメントを識別するキー |
 
 ## 出力
 
@@ -203,6 +206,42 @@ projects:
 | `deployment-id` | 更新または作成されたデプロイ ID |
 | `web-app-url` | Web アプリの URL（該当する場合） |
 | `summary` | 人間可読のサマリ（Markdown） |
+
+## PR に差分をコメントする
+
+`dry-run` と組み合わせると、マージ前に「何が本番に出るか」を PR 上で確認できる。
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write     # これが無いと 403 になる
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          environment: prod
+          dry-run: true
+          comment-on-pr: true
+```
+
+コメントには隠しマーカー（`<!-- gas-deploy-action:<key> -->`）を埋め込んでおり、**同じキーのコメントは新規作成ではなく更新される。** push のたびにコメントが積み上がることはない。
+
+キーの既定値は複数プロジェクトモードでは `environment`、単一プロジェクトモードでは `default`。つまり同じ PR に dev と prod のプレビューを並べても互いを上書きしない。**単一プロジェクトモードを1つのワークフローで複数回実行する場合は、`comment-key` で明示的に分けること**（既定値が固定なので、後の実行が前の実行のコメントを上書きする）。
+
+### コメントの失敗はデプロイの失敗にしない
+
+コメント投稿に失敗しても、ジョブは失敗扱いにせず警告に留める。成功した本番デプロイを赤い実行結果として報告すると、それを見て動くロールバック自動化や人間の判断を誤らせるため。サマリの内容はこの時点で既にジョブサマリに書き出してあるので、コメントが出なくても情報は失われない。
+
+### PR 以外の実行では何もしない
+
+push で走るワークフローに `comment-on-pr: true` が付いたままでも失敗しない。「PR ではない」は異常ではなく通常の状態として扱う。
+
+なお **フォークからの `pull_request` イベントでは、既定の `GITHUB_TOKEN` が読み取り専用になるためコメントを投稿できない。** これは GitHub 側のセキュリティ仕様。
 
 ## デプロイをロールバックする
 

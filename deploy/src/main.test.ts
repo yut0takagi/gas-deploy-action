@@ -11,6 +11,7 @@ import {
   parseProjectType,
   readConfigFile,
   resolveIgnorePatterns,
+  resolvePrCommentContext,
   resolveTargetIgnore,
 } from './main.js';
 
@@ -308,5 +309,72 @@ describe('buildDeploymentsOutput', () => {
     expect(failedEntry?.error).not.toContain('RESPONSE_BODY_WITH_SECRET_DETAIL');
     expect(JSON.stringify(output)).not.toContain('RESPONSE_BODY_WITH_SECRET_DETAIL');
     expect(JSON.stringify(output)).not.toContain('次の手順を確認してください');
+  });
+});
+
+describe('resolvePrCommentContext', () => {
+  async function writeEvent(payload: unknown): Promise<string> {
+    const dir = await makeTempDir();
+    const path = join(dir, 'event.json');
+    await writeFile(path, JSON.stringify(payload), 'utf8');
+    return path;
+  }
+
+  it('pull_request イベントから owner / repo / PR 番号を解決する', async () => {
+    const eventPath = await writeEvent({ pull_request: { number: 12 } });
+
+    const context = await resolvePrCommentContext({
+      GITHUB_REPOSITORY: 'octo/gas',
+      GITHUB_EVENT_PATH: eventPath,
+    });
+
+    expect(context).toEqual({ owner: 'octo', repo: 'gas', prNumber: 12 });
+  });
+
+  it('PR 以外のイベントでは undefined を返す（失敗させない）', async () => {
+    const eventPath = await writeEvent({ ref: 'refs/heads/main' });
+
+    const context = await resolvePrCommentContext({
+      GITHUB_REPOSITORY: 'octo/gas',
+      GITHUB_EVENT_PATH: eventPath,
+    });
+
+    expect(context).toBeUndefined();
+  });
+
+  it('イベントファイルが読めない場合も undefined を返す', async () => {
+    const dir = await makeTempDir();
+
+    const context = await resolvePrCommentContext({
+      GITHUB_REPOSITORY: 'octo/gas',
+      GITHUB_EVENT_PATH: join(dir, 'missing.json'),
+    });
+
+    expect(context).toBeUndefined();
+  });
+
+  it('イベントファイルが壊れている場合も undefined を返す', async () => {
+    const dir = await makeTempDir();
+    const path = join(dir, 'event.json');
+    await writeFile(path, '{ not json', 'utf8');
+
+    const context = await resolvePrCommentContext({ GITHUB_REPOSITORY: 'octo/gas', GITHUB_EVENT_PATH: path });
+
+    expect(context).toBeUndefined();
+  });
+
+  it('環境変数が欠けている場合は undefined を返す', async () => {
+    const eventPath = await writeEvent({ pull_request: { number: 12 } });
+
+    expect(await resolvePrCommentContext({ GITHUB_EVENT_PATH: eventPath })).toBeUndefined();
+    expect(await resolvePrCommentContext({ GITHUB_REPOSITORY: 'octo/gas' })).toBeUndefined();
+  });
+
+  it('GITHUB_REPOSITORY が owner/repo 形式でない場合は undefined を返す', async () => {
+    const eventPath = await writeEvent({ pull_request: { number: 12 } });
+
+    const context = await resolvePrCommentContext({ GITHUB_REPOSITORY: 'noslash', GITHUB_EVENT_PATH: eventPath });
+
+    expect(context).toBeUndefined();
   });
 });

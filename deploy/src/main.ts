@@ -17,6 +17,7 @@ import {
   type ProjectType,
   type ResolvedTarget,
 } from '@gas-deploy/core';
+import { resolvePullRequestNumber, upsertComment } from './comment.js';
 import { renderMultiSummary, renderSummary } from './summary.js';
 
 const PROJECT_TYPES: ProjectType[] = ['webapp', 'addon', 'bound', 'standalone'];
@@ -226,6 +227,89 @@ export function buildDeploymentsOutput(
   });
 }
 
+export interface PrCommentContext {
+  owner: string;
+  repo: string;
+  prNumber: number;
+}
+
+/**
+ * PR コメントの宛先を GHA の環境変数から決める。PR の実行でなければ undefined。
+ *
+ * push で走らせているワークフローに comment-on-pr が付いたままでも失敗させない。
+ * 「PR ではない」は異常ではなく通常の状態として扱う。
+ */
+export async function resolvePrCommentContext(
+  env: Record<string, string | undefined>,
+): Promise<PrCommentContext | undefined> {
+  const repository = env['GITHUB_REPOSITORY'];
+  const eventPath = env['GITHUB_EVENT_PATH'];
+  if (!repository || !eventPath) {
+    return undefined;
+  }
+
+  const [owner, repo] = repository.split('/');
+  if (!owner || !repo) {
+    return undefined;
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await readFile(eventPath, 'utf8'));
+  } catch {
+    // ペイロードが読めない・壊れているのはコメントを諦めるに足る理由だが、
+    // デプロイを止める理由にはならない。cause は付けない（イベントペイロードには
+    // トークンこそ含まれないが、非公開のリポジトリ情報が含まれうる）。
+    return undefined;
+  }
+
+  const prNumber = resolvePullRequestNumber(payload);
+  if (prNumber === undefined) {
+    return undefined;
+  }
+  return { owner, repo, prNumber };
+}
+
+/**
+ * サマリを PR にコメントする。
+ *
+ * 失敗しても例外にしない。コメントは補助であり、成功した本番デプロイを赤い実行結果として
+ * 報告すると、それを見て動くロールバック自動化や人間の判断を誤らせる。内容自体は
+ * この時点で既にジョブサマリに書き出してあるので、コメントが出なくても失われない。
+ */
+async function commentIfRequested(enabled: boolean, summary: string, defaultKey: string): Promise<void> {
+  if (!enabled) {
+    return;
+  }
+
+  const token = core.getInput('github-token');
+  if (!token) {
+    core.warning('comment-on-pr が有効ですが github-token が空のため、コメントを投稿しません');
+    return;
+  }
+  core.setSecret(token);
+
+  const context = await resolvePrCommentContext(process.env);
+  if (context === undefined) {
+    core.info('PR の実行ではないため、コメントは投稿しません');
+    return;
+  }
+
+  const key = core.getInput('comment-key') || defaultKey;
+  try {
+    const result = await upsertComment({ ...context, token }, key, summary);
+    core.info(
+      `PR #${context.prNumber} のコメントを${result.action === 'created' ? '作成' : '更新'}しました (id: ${result.id})`,
+    );
+  } catch (error) {
+    core.warning(
+      `PR へのコメントに失敗しました（デプロイ自体の結果は上記のとおりで、この失敗の影響を受けていません）: ${
+        error instanceof GasDeployError ? error.format() : String(error)
+      }`,
+    );
+  }
+}
+
 export async function run(): Promise<void> {
   // script-id が指定されていれば単一プロジェクトモード、無ければ config を使う
   // 複数プロジェクトモード。両者を混ぜると挙動が予測しづらくなるため、
@@ -247,6 +331,7 @@ async function runSingleProject(scriptId: string): Promise<void> {
   const projectType = parseProjectType(core.getInput('project-type') || 'standalone');
   const dryRun = parseBooleanInput('dry-run');
   const createVersion = parseBooleanInput('create-version');
+  const commentOnPr = parseBooleanInput('comment-on-pr');
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput('ignore'));
 
   const credentials = parseCredentials(core.getInput('credentials', { required: true }));
@@ -279,6 +364,10 @@ async function runSingleProject(scriptId: string): Promise<void> {
   core.setOutput('summary', summary);
 
   await core.summary.addRaw(summary).write();
+
+  // 単一プロジェクトモードには環境という概念が無いため、既定のキーは固定。1つの
+  // ワークフローで複数回実行する場合は comment-key で分ける必要がある。
+  await commentIfRequested(commentOnPr, summary, 'default');
 }
 
 async function runMultiProject(): Promise<void> {
@@ -303,6 +392,7 @@ async function runMultiProject(): Promise<void> {
 
   const dryRun = parseBooleanInput('dry-run');
   const createVersion = parseBooleanInput('create-version');
+  const commentOnPr = parseBooleanInput('comment-on-pr');
   const descriptionInput = core.getInput('description');
   const deployTargets = await buildDeployTargets(targets, {
     ignoreInput: core.getInput('ignore'),
@@ -337,6 +427,10 @@ async function runMultiProject(): Promise<void> {
   core.setOutput('summary', summary);
 
   await core.summary.addRaw(summary).write();
+
+  // 既定のキーを environment にすることで、同じ PR に dev と prod のコメントが
+  // 並んでも互いを上書きしない。
+  await commentIfRequested(commentOnPr, summary, environment);
 
   // deployAll は例外を投げず、代わりに failed を返す。ここで明示的に setFailed する
   // ことで、赤い実行結果からどのプロジェクトが完了/未実行かをサマリで追える状態を保ったまま

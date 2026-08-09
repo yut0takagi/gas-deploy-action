@@ -47,6 +47,23 @@ inputs:
     description: '複数プロジェクトモードでデプロイするプロジェクト名（カンマ区切り）。all で全プロジェクト'
     required: false
     default: 'all'
+  comment-on-pr:
+    description: >-
+      サマリを PR にコメントするかどうか。ワークフローに permissions: pull-requests: write が
+      必要です。PR 以外の実行では何もしません。コメントに失敗してもデプロイは失敗扱いにしません。
+    required: false
+    default: 'false'
+  github-token:
+    description: 'PR コメントに使うトークン'
+    required: false
+    default: ${{ github.token }}
+  comment-key:
+    description: >-
+      コメントを識別するキー。同じキーのコメントは新規作成ではなく更新されます。
+      省略時は複数プロジェクトモードでは environment、単一プロジェクトモードでは default。
+      1つのワークフローで単一プロジェクトモードを複数回実行する場合は、互いのコメントを
+      上書きしないよう明示的に分けてください。
+    required: false
 
 outputs:
   changed:
