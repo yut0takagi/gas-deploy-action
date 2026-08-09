@@ -1,4 +1,4 @@
-# gas-deploy-actions
+# gas-deploy-action
 
 Google Apps Script（GAS）プロジェクトを Apps Script API 直叩きでデプロイする GitHub Action。
 
@@ -37,6 +37,32 @@ jobs:
 
 ## セットアップ
 
+認証情報の用意には2つの経路がある。**権限の広さが違う**ので、違いを理解して選ぶこと。
+
+| | 手間 | Secrets に入るトークンの権限 |
+|---|---|---|
+| **A. `setup-cli`（推奨）** | GCP コンソール操作が必要 | **2スコープのみ** |
+| **B. clasp の認証情報を借りる** | `clasp login` だけ | **13スコープ**（`cloud-platform` を含む） |
+
+### A. `setup-cli` で専用トークンを発行する（推奨）
+
+このリポジトリをクローンして実行する。
+
+```bash
+npm install
+npm run setup
+```
+
+対話形式で、GCP プロジェクトの用意、Apps Script API の有効化（2箇所）、OAuth 同意画面の設定、Desktop タイプの OAuth クライアント作成までを案内する。その後ブラウザで認可し、**`script.projects` と `script.deployments` の2つだけを要求した**リフレッシュトークンを発行する。
+
+発行後、実際に付与されたスコープが要求どおり2つだけかを検証する。**余分なスコープが混ざっていた場合は保存せずに中断する。** 最小権限を保証すると謳う道具が、保証できていない認証情報を黙って保存しては意味がないため。
+
+`gh` が使える環境なら、そのまま GitHub Secrets への登録まで行う。
+
+### B. clasp の認証情報をそのまま使う（手早い）
+
+既に clasp を使っているなら、トークンを発行し直さずに始められる。
+
 1. ローカルで `clasp login` を実行し、`~/.clasprc.json` を作る（clasp が未導入なら `npm i -g @google/clasp`）。
 2. https://script.google.com/home/usersettings で Apps Script API を有効化する。これを忘れるとデプロイ対象のスクリプトに関わらず `403` になる。
 3. `~/.clasprc.json` の中身をそのまま GitHub の Secret（例 `CLASPRC_JSON`）に登録する。中身を書き換える必要はない。
@@ -44,6 +70,8 @@ jobs:
 ```bash
 gh secret set CLASPRC_JSON < ~/.clasprc.json
 ```
+
+**ただしこの経路では最小権限にならない。** 後述の「clasp のトークンより狭いスコープ」を必ず読むこと。
 
 ### ⚠️ OAuth 同意画面の状態を必ず確認する
 
@@ -145,6 +173,7 @@ Apps Script は **バージョン付きデプロイを最大20個まで**しか�
 ## 既知の未検証事項
 
 - **`script.projects` が Google の審査対象スコープかどうかは未検証。** 個人 Gmail アカウントでの「確認されていないアプリ」警告の有無に影響する（前述の該当節を参照）。
+- **`setup-cli` のループバック認可は実環境で未検証。** Desktop タイプの OAuth クライアントが任意のポートの `http://127.0.0.1:<port>` を事前登録なしで受け入れるという前提に立っている（RFC 8252 §7.3、`clasp login` や `gcloud auth login` と同じ仕組み）。もし固定ポートの登録が必要だと判明した場合、実装はポートを固定するだけで対応できるが、セットアップ手順の説明が変わる。
 
 なお `runs.using: node24` は実際の GitHub Actions ランナーで**動作を確認済み**（2026-08-09）。GitHub 側でも Node 20 は非推奨となり Node 24 が既定になっている。
 
