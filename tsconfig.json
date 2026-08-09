@@ -4,6 +4,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/setup-cli" },
     { "path": "./deploy" },
+    { "path": "./rollback" },
     { "path": "./tests" }
   ]
 }

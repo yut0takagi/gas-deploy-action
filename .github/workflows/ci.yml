@@ -28,11 +28,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # git diff --exit-code では未追跡ファイルを見逃す。新しいバンドルが増えたのに
+      # コミットされていない状態を検出できないため、必ず git status --porcelain を使う。
       - name: Verify dist is in sync
         run: |
-          if [ -n "$(git status --porcelain -- deploy/dist)" ]; then
-            echo "::error::deploy/dist がソースと同期していません。'npm run build' を実行してコミットしてください"
-            git status --porcelain -- deploy/dist
+          if [ -n "$(git status --porcelain -- deploy/dist rollback/dist)" ]; then
+            echo "::error::dist がソースと同期していません。'npm run build' を実行してコミットしてください"
+            git status --porcelain -- deploy/dist rollback/dist
             exit 1
           fi
 
@@ -40,23 +42,26 @@ jobs:
       # モジュール形式の不一致（CJS バンドルを .js のまま置くと
       # deploy/package.json の "type": "module" により ESM 扱いされる等）は
       # 実行して初めて露見する。実際にこの経路で本番が壊れた。
-      - name: Smoke-test the bundle
+      - name: Smoke-test the bundles
         run: |
-          set +e
-          OUTPUT=$(node deploy/dist/index.cjs 2>&1)
-          set -e
-          echo "$OUTPUT"
-          # 入力が無いので必ず失敗する。重要なのは「どう失敗したか」。
-          #
-          # 我々のエラー処理まで到達していれば @actions/core が ::error:: を出力する。
-          # モジュール形式の不一致や依存関係の欠落では、そこへ到達する前に Node が
-          # 生のエラーを吐いて終わる。
-          #
-          # 特定のメッセージ文字列で判定しないこと。入力仕様が変わるたびに壊れる。
-          if echo "$OUTPUT" | grep -q "::error::" \
-             && ! echo "$OUTPUT" | grep -qE "ReferenceError|SyntaxError|Cannot find module|is not defined"; then
-            echo "バンドルは正常に読み込まれ、想定どおり入力不足で停止しました"
-          else
-            echo "::error::バンドルの起動に失敗しました。モジュール形式や依存関係の問題の可能性があります"
-            exit 1
-          fi
+          for BUNDLE in deploy/dist/index.cjs rollback/dist/index.cjs; do
+            echo "--- $BUNDLE ---"
+            set +e
+            OUTPUT=$(node "$BUNDLE" 2>&1)
+            set -e
+            echo "$OUTPUT"
+            # 入力が無いので必ず失敗する。重要なのは「どう失敗したか」。
+            #
+            # 我々のエラー処理まで到達していれば @actions/core が ::error:: を出力する。
+            # モジュール形式の不一致や依存関係の欠落では、そこへ到達する前に Node が
+            # 生のエラーを吐いて終わる。
+            #
+            # 特定のメッセージ文字列で判定しないこと。入力仕様が変わるたびに壊れる。
+            if echo "$OUTPUT" | grep -q "::error::" \
+               && ! echo "$OUTPUT" | grep -qE "ReferenceError|SyntaxError|Cannot find module|is not defined"; then
+              echo "$BUNDLE は正常に読み込まれ、想定どおり入力不足で停止しました"
+            else
+              echo "::error::$BUNDLE の起動に失敗しました。モジュール形式や依存関係の問題の可能性があります"
+              exit 1
+            fi
+          done

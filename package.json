@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "deploy"],
+  "workspaces": ["packages/*", "deploy", "rollback"],
   "engines": { "node": ">=22" },
   "scripts": {
     "test": "vitest run",

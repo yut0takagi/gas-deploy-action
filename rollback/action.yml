@@ -1,0 +1,62 @@
+name: 'Roll back Google Apps Script'
+description: 'Google Apps Script のデプロイを過去のバージョンに戻します'
+branding:
+  icon: 'rotate-ccw'
+  color: 'yellow'
+
+inputs:
+  credentials:
+    description: 'clasp の .clasprc.json、または {client_id, client_secret, refresh_token} の JSON'
+    required: true
+  script-id:
+    description: 'ロールバック対象の scriptId。指定すると config は読み込まれません'
+    required: false
+  deployment-id:
+    description: >-
+      ロールバックするデプロイの ID。省略した場合、バージョン付きデプロイがちょうど1つの
+      ときだけ自動で特定します。複数ある場合は候補を表示して失敗します。
+    required: false
+  version-number:
+    description: '戻り先のバージョン番号。省略すると現在のバージョンの1つ前に戻します'
+    required: false
+  dry-run:
+    description: 'ロールバック先の確認のみ行い、デプロイを書き換えません'
+    required: false
+    default: 'false'
+  description:
+    description: 'デプロイに設定する説明。省略時は戻し元と戻り先のバージョンを含む既定の説明'
+    required: false
+  config:
+    description: 'script-id が未指定のときに読み込む設定ファイルのパス'
+    required: false
+    default: 'gasdeploy.yml'
+  environment:
+    description: 'config モードで対象とする environment 名。config モードでは必須です'
+    required: false
+  project:
+    description: >-
+      config モードで対象とするプロジェクト名。config モードでは必須です。
+      ロールバックは一度に1プロジェクトのみを対象とします。
+    required: false
+
+outputs:
+  rolled-back:
+    description: >-
+      実際にデプロイを書き換えたか（true / false）。dry-run のとき、および
+      すでに戻り先バージョンを指していたときは false になります。
+  from-version:
+    description: 'ロールバック前にデプロイが指していたバージョン番号'
+  to-version:
+    description: 'ロールバック先のバージョン番号（dry-run のときは戻す予定のバージョン）'
+  deployment-id:
+    description: '対象となったデプロイの ID'
+  web-app-url:
+    description: 'Web アプリの URL（該当する場合）。ロールバックしても URL は変わりません'
+  summary:
+    description: '人間可読のサマリ（Markdown）'
+
+runs:
+  using: 'node24'
+  # .cjs であること。rollback/package.json の "type": "module" により、
+  # .js だと Node が ESM として解釈して CJS バンドルが動かない。
+  main: 'dist/index.cjs'

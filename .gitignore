@@ -3,8 +3,9 @@ node_modules/
 coverage/
 .env
 .DS_Store
-# packages 配下のビルド出力。deploy/dist は Action の実行に必要なので
+# packages 配下のビルド出力。deploy/dist と rollback/dist は Action の実行に必要なので
 # 意図的に追跡しており、ここには含めない。
 packages/*/dist/
 deploy/build/
+rollback/build/
 tests/build/
