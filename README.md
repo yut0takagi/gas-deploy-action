@@ -136,7 +136,9 @@ Apps Script は **バージョン付きデプロイを最大20個まで**しか�
 
 ## 既知の未検証事項
 
-- **`runs.using: node24`（`deploy/action.yml`）は実際の GitHub Actions ランナーで未検証。** 初回利用時に `Unexpected value 'node24'` のようなエラーで失敗する場合、`deploy/action.yml` の `runs.using` を `node20` に変更すること。バンドル自体は node20 をターゲットにビルドされているため、それ以外の変更は不要。
+- **`script.projects` が Google の審査対象スコープかどうかは未検証。** 個人 Gmail アカウントでの「確認されていないアプリ」警告の有無に影響する（前述の該当節を参照）。
+
+なお `runs.using: node24` は実際の GitHub Actions ランナーで**動作を確認済み**（2026-08-09）。GitHub 側でも Node 20 は非推奨となり Node 24 が既定になっている。
 
 ## 実地確認の裏付け
 
