@@ -36,6 +36,11 @@ export interface DeployResult {
   versionNumber?: number;
   deploymentId?: string;
   webAppUrl?: string;
+  /**
+   * このデプロイが書き換わる前に指していたバージョン番号。ロールバック先として使える。
+   * `deploymentId` を指定して実際にデプロイを更新した場合のみ設定される。
+   */
+  previousVersionNumber?: number;
 }
 
 const URL_CHANGE_WARNING =
@@ -72,6 +77,21 @@ export async function deploy(client: AppsScriptClient, options: DeployOptions): 
     return { changed: true, diff, warnings };
   }
 
+  // 参照先を書き換える前に、いま指しているバージョンを記録する。
+  //
+  // ここで読むことが重要。Apps Script API のデプロイ読み取りは書き込み直後の一貫性を
+  // 保証せず、実測では deployments.list が30秒以上古い値を返し続けた。更新後に読むと
+  // 「ロールバック先」として誤った番号を渡すことになる。この時点ならまだ何も書いて
+  // いないため、その問題に巻き込まれない。
+  //
+  // 読めなければデプロイ全体を失敗させる。deployment-id が誤っていれば後段の
+  // updateDeployment でどのみち失敗するが、そこはファイル内容を書いた後であり、
+  // 再実行しても差分ゼロと判定されて救済されない位置。手前で落とす方が安全。
+  let previousVersionNumber: number | undefined;
+  if (options.createVersion && options.deploymentId !== undefined) {
+    previousVersionNumber = (await client.getDeployment(options.scriptId, options.deploymentId)).versionNumber;
+  }
+
   await client.updateContent(options.scriptId, local);
 
   if (!options.createVersion) {
@@ -96,6 +116,9 @@ export async function deploy(client: AppsScriptClient, options: DeployOptions): 
   const result: DeployResult = { changed: true, diff, warnings, versionNumber, deploymentId: deployment.deploymentId };
   if (deployment.webAppUrl !== undefined) {
     result.webAppUrl = deployment.webAppUrl;
+  }
+  if (previousVersionNumber !== undefined) {
+    result.previousVersionNumber = previousVersionNumber;
   }
   return result;
 }

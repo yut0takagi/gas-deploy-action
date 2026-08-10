@@ -172,6 +172,8 @@ export interface DeploymentOutputEntry {
   scriptId: string;
   status: DeploymentStatus;
   versionNumber?: number;
+  /** 更新前に指していたバージョン番号。ロールバック先として使える。 */
+  previousVersionNumber?: number;
   deploymentId?: string;
   webAppUrl?: string;
   error?: string;
@@ -203,6 +205,8 @@ export function buildDeploymentsOutput(
         status: completedEntry.result.changed ? 'deployed' : 'unchanged',
       };
       if (completedEntry.result.versionNumber !== undefined) entry.versionNumber = completedEntry.result.versionNumber;
+      if (completedEntry.result.previousVersionNumber !== undefined)
+        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
       if (completedEntry.result.deploymentId !== undefined) entry.deploymentId = completedEntry.result.deploymentId;
       if (completedEntry.result.webAppUrl !== undefined) entry.webAppUrl = completedEntry.result.webAppUrl;
       return entry;
@@ -359,6 +363,7 @@ async function runSingleProject(scriptId: string): Promise<void> {
   const summary = renderSummary(result);
   core.setOutput('changed', String(result.changed));
   core.setOutput('version-number', result.versionNumber ?? '');
+  core.setOutput('previous-version-number', result.previousVersionNumber ?? '');
   core.setOutput('deployment-id', result.deploymentId ?? '');
   core.setOutput('web-app-url', result.webAppUrl ?? '');
   core.setOutput('summary', summary);

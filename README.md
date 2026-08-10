@@ -205,6 +205,7 @@ projects:
 |---|---|
 | `changed` | 差分があったかどうか（`true` / `false`） |
 | `version-number` | 作成されたバージョン番号 |
+| `previous-version-number` | 更新前にデプロイが指していたバージョン番号（`deployment-id` 指定時のみ）。ロールバック先として使える |
 | `deployment-id` | 更新または作成されたデプロイ ID |
 | `web-app-url` | Web アプリの URL（該当する場合） |
 | `summary` | 人間可読のサマリ（Markdown） |
@@ -293,6 +294,35 @@ push で走るワークフローに `comment-on-pr: true` が付いたままで�
 **ただしこれは確率を下げるだけで、保証ではない。** 2回の読み取りが両方とも同じ古いレプリカに当たれば通ってしまう（実測で発生した）。その場合、意図より1つ余計に古いバージョンへ静かに戻る。
 
 デプロイ直後にロールバックする — つまり障害対応で最もありがちな流れ — では、**`version-number` を明示すること。** 明示すれば戻り先はこの問題の影響を受けない（影響は「現在のバージョン」の表示と無操作判定に留まる）。
+
+### 戻り先を確実に受け渡す
+
+`deploy` は `previous-version-number` を出力する。**デプロイを更新する前に読み取った値**なので、読み取り一貫性の問題の影響を受けない。これを `rollback` に渡せば、この節の問題を完全に回避できる。
+
+```yaml
+- id: deploy
+  uses: yut0takagi/gas-deploy-action/deploy@v0
+  with:
+    credentials: ${{ secrets.CLASPRC_JSON }}
+    script-id: ${{ secrets.GAS_SCRIPT_ID }}
+    deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}
+
+- name: スモークテスト
+  id: smoke
+  continue-on-error: true
+  run: ./scripts/smoke-test.sh
+
+- name: 失敗したら直前のバージョンに戻す
+  if: steps.smoke.outcome == 'failure'
+  uses: yut0takagi/gas-deploy-action/rollback@v0
+  with:
+    credentials: ${{ secrets.CLASPRC_JSON }}
+    script-id: ${{ secrets.GAS_SCRIPT_ID }}
+    deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}
+    version-number: ${{ steps.deploy.outputs.previous-version-number }}
+```
+
+複数プロジェクトモードでは `deployments` 出力の各要素に `previousVersionNumber` が入る。
 
 ### ロールバック対象の特定
 

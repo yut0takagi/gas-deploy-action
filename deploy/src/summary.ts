@@ -20,6 +20,9 @@ export function renderSummary(result: DeployResult): string {
 
   const facts: string[] = [];
   if (result.versionNumber !== undefined) facts.push(`- バージョン: \`${result.versionNumber}\``);
+  if (result.previousVersionNumber !== undefined) {
+    facts.push(`- 更新前のバージョン: \`${result.previousVersionNumber}\`（ロールバック先）`);
+  }
   if (result.deploymentId !== undefined) facts.push(`- デプロイ ID: \`${result.deploymentId}\``);
   if (result.webAppUrl !== undefined) facts.push(`- Web アプリ URL: ${result.webAppUrl}`);
   if (facts.length > 0) lines.push(...facts, '');
@@ -48,6 +51,9 @@ export function renderMultiSummary(result: MultiDeployResult, targets: readonly 
 
     const facts: string[] = [];
     if (entry.result.versionNumber !== undefined) facts.push(`- バージョン: \`${entry.result.versionNumber}\``);
+    if (entry.result.previousVersionNumber !== undefined) {
+      facts.push(`- 更新前のバージョン: \`${entry.result.previousVersionNumber}\`（ロールバック先）`);
+    }
     if (entry.result.deploymentId !== undefined) facts.push(`- デプロイ ID: \`${entry.result.deploymentId}\``);
     if (entry.result.webAppUrl !== undefined) facts.push(`- Web アプリ URL: ${entry.result.webAppUrl}`);
     if (facts.length > 0) lines.push(...facts, '');

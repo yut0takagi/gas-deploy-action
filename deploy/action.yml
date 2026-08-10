@@ -70,6 +70,12 @@ outputs:
     description: '差分があったかどうか（true / false）'
   version-number:
     description: '作成されたバージョン番号（単一プロジェクトモードのみ）'
+  previous-version-number:
+    description: >-
+      このデプロイが更新される前に指していたバージョン番号（単一プロジェクトモードで
+      deployment-id を指定した場合のみ）。ロールバック先としてそのまま rollback アクションの
+      version-number に渡せます。更新前に読み取った値なので、Apps Script API の
+      読み取り一貫性の問題の影響を受けません。
   deployment-id:
     description: '更新または作成されたデプロイ ID（単一プロジェクトモードのみ）'
   web-app-url:
@@ -81,8 +87,8 @@ outputs:
       複数プロジェクトモードでの各プロジェクトの結果（JSON 配列）。対象になったプロジェクトは
       失敗・未実行のものも含めて必ず1件ずつ含まれ、欠けることはありません。各要素は
       project, environment, scriptId, status（deployed | unchanged | failed | skipped の
-      いずれか）を持ち、該当する場合のみ versionNumber, deploymentId, webAppUrl, error
-      （failed のときのみ、失敗メッセージ）を含みます。
+      いずれか）を持ち、該当する場合のみ versionNumber, previousVersionNumber,
+      deploymentId, webAppUrl, error（failed のときのみ、失敗メッセージ）を含みます。
 
 runs:
   using: 'node24'

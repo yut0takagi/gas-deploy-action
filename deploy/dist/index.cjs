@@ -29576,6 +29576,10 @@ async function deploy(client, options) {
   if (options.dryRun) {
     return { changed: true, diff, warnings };
   }
+  let previousVersionNumber;
+  if (options.createVersion && options.deploymentId !== void 0) {
+    previousVersionNumber = (await client.getDeployment(options.scriptId, options.deploymentId)).versionNumber;
+  }
   await client.updateContent(options.scriptId, local);
   if (!options.createVersion) {
     return { changed: true, diff, warnings };
@@ -29592,6 +29596,9 @@ async function deploy(client, options) {
   const result = { changed: true, diff, warnings, versionNumber, deploymentId: deployment.deploymentId };
   if (deployment.webAppUrl !== void 0) {
     result.webAppUrl = deployment.webAppUrl;
+  }
+  if (previousVersionNumber !== void 0) {
+    result.previousVersionNumber = previousVersionNumber;
   }
   return result;
 }
@@ -30079,6 +30086,9 @@ function renderSummary(result) {
   }
   const facts = [];
   if (result.versionNumber !== void 0) facts.push(`- \u30D0\u30FC\u30B8\u30E7\u30F3: \`${result.versionNumber}\``);
+  if (result.previousVersionNumber !== void 0) {
+    facts.push(`- \u66F4\u65B0\u524D\u306E\u30D0\u30FC\u30B8\u30E7\u30F3: \`${result.previousVersionNumber}\`\uFF08\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5148\uFF09`);
+  }
   if (result.deploymentId !== void 0) facts.push(`- \u30C7\u30D7\u30ED\u30A4 ID: \`${result.deploymentId}\``);
   if (result.webAppUrl !== void 0) facts.push(`- Web \u30A2\u30D7\u30EA URL: ${result.webAppUrl}`);
   if (facts.length > 0) lines.push(...facts, "");
@@ -30094,6 +30104,9 @@ function renderMultiSummary(result, targets) {
     lines.push(entry.result.changed ? "\u5909\u66F4\u3042\u308A" : "\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
     const facts = [];
     if (entry.result.versionNumber !== void 0) facts.push(`- \u30D0\u30FC\u30B8\u30E7\u30F3: \`${entry.result.versionNumber}\``);
+    if (entry.result.previousVersionNumber !== void 0) {
+      facts.push(`- \u66F4\u65B0\u524D\u306E\u30D0\u30FC\u30B8\u30E7\u30F3: \`${entry.result.previousVersionNumber}\`\uFF08\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5148\uFF09`);
+    }
     if (entry.result.deploymentId !== void 0) facts.push(`- \u30C7\u30D7\u30ED\u30A4 ID: \`${entry.result.deploymentId}\``);
     if (entry.result.webAppUrl !== void 0) facts.push(`- Web \u30A2\u30D7\u30EA URL: ${entry.result.webAppUrl}`);
     if (facts.length > 0) lines.push(...facts, "");
@@ -30236,6 +30249,8 @@ function buildDeploymentsOutput(targets, multiResult) {
         status: completedEntry.result.changed ? "deployed" : "unchanged"
       };
       if (completedEntry.result.versionNumber !== void 0) entry.versionNumber = completedEntry.result.versionNumber;
+      if (completedEntry.result.previousVersionNumber !== void 0)
+        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
       if (completedEntry.result.deploymentId !== void 0) entry.deploymentId = completedEntry.result.deploymentId;
       if (completedEntry.result.webAppUrl !== void 0) entry.webAppUrl = completedEntry.result.webAppUrl;
       return entry;
@@ -30344,6 +30359,7 @@ async function runSingleProject(scriptId) {
   const summary2 = renderSummary(result);
   core.setOutput("changed", String(result.changed));
   core.setOutput("version-number", result.versionNumber ?? "");
+  core.setOutput("previous-version-number", result.previousVersionNumber ?? "");
   core.setOutput("deployment-id", result.deploymentId ?? "");
   core.setOutput("web-app-url", result.webAppUrl ?? "");
   core.setOutput("summary", summary2);

@@ -21,6 +21,8 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     getContent: vi.fn(async (): Promise<ScriptFile[]> => []),
     updateContent: vi.fn(async () => undefined),
     createVersion: vi.fn(async () => 7),
+    // 既存デプロイは更新前 v6 を指しており、この実行で v7 に上がる想定。
+    getDeployment: vi.fn(async (): Promise<Deployment> => ({ deploymentId: 'dep-1', versionNumber: 6 })),
     updateDeployment: vi.fn(async () => deployment),
     createDeployment: vi.fn(async () => deployment),
     listDeployments: vi.fn(async (): Promise<Deployment[]> => [deployment]),
@@ -214,5 +216,70 @@ describe('deploy', () => {
     const result = await deploy(client, baseOptions(rootDir));
 
     expect(result.warnings.join('\n')).not.toContain('デプロイ数');
+  });
+});
+
+describe('deploy の previousVersionNumber', () => {
+  it('deploymentId 指定時、更新前に指していたバージョンを返す', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient();
+
+    const result = await deploy(client, { ...baseOptions(rootDir), deploymentId: 'dep-1' });
+
+    expect(result.previousVersionNumber).toBe(6);
+    expect(result.versionNumber).toBe(7);
+  });
+
+  it('書き込みを始める前に読む（更新後に読むと古い値を掴む）', async () => {
+    // Apps Script API のデプロイ読み取りは書き込み直後の一貫性を保証しないため、
+    // 読む順序そのものが正しさの条件になる。
+    const rootDir = await makeProject();
+    const order: string[] = [];
+    const client = fakeClient({
+      getDeployment: vi.fn(async (): Promise<Deployment> => {
+        order.push('getDeployment');
+        return { deploymentId: 'dep-1', versionNumber: 6 };
+      }),
+      updateContent: vi.fn(async () => {
+        order.push('updateContent');
+      }),
+      updateDeployment: vi.fn(async () => {
+        order.push('updateDeployment');
+        return { deploymentId: 'dep-1', versionNumber: 7 };
+      }),
+    });
+
+    await deploy(client, { ...baseOptions(rootDir), deploymentId: 'dep-1' });
+
+    expect(order.indexOf('getDeployment')).toBeLessThan(order.indexOf('updateContent'));
+    expect(order.indexOf('getDeployment')).toBeLessThan(order.indexOf('updateDeployment'));
+  });
+
+  it('deploymentId 未指定なら読まない（新規デプロイには「更新前」が無い）', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient();
+
+    const result = await deploy(client, baseOptions(rootDir));
+
+    expect(client.getDeployment).not.toHaveBeenCalled();
+    expect(result.previousVersionNumber).toBeUndefined();
+  });
+
+  it('createVersion が false なら読まない（デプロイを更新しないため）', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient();
+
+    await deploy(client, { ...baseOptions(rootDir), deploymentId: 'dep-1', createVersion: false });
+
+    expect(client.getDeployment).not.toHaveBeenCalled();
+  });
+
+  it('dry-run では読まない（書き込まないので更新前も何も無い）', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient();
+
+    await deploy(client, { ...baseOptions(rootDir), deploymentId: 'dep-1', dryRun: true });
+
+    expect(client.getDeployment).not.toHaveBeenCalled();
   });
 });
