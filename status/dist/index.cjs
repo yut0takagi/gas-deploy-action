@@ -18294,11 +18294,11 @@ var require_summary = __commonJS({
        */
       addTable(rows) {
         const tableBody = rows.map((row) => {
-          const cells = row.map((cell) => {
-            if (typeof cell === "string") {
-              return this.wrap("td", cell);
+          const cells = row.map((cell2) => {
+            if (typeof cell2 === "string") {
+              return this.wrap("td", cell2);
             }
-            const { header, data, colspan, rowspan } = cell;
+            const { header, data, colspan, rowspan } = cell2;
             const tag = header ? "th" : "td";
             const attrs = Object.assign(Object.assign({}, colspan && { colspan }), rowspan && { rowspan });
             return this.wrap(tag, data, attrs);
@@ -19693,7 +19693,7 @@ var require_core = __commonJS({
       return inputs.map((input) => input.trim());
     }
     exports2.getMultilineInput = getMultilineInput;
-    function getBooleanInput2(name, options) {
+    function getBooleanInput(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
       const val = getInput2(name, options);
@@ -19704,7 +19704,7 @@ var require_core = __commonJS({
       throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}
 Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
     }
-    exports2.getBooleanInput = getBooleanInput2;
+    exports2.getBooleanInput = getBooleanInput;
     function setOutput2(name, value) {
       const filePath = process.env["GITHUB_OUTPUT"] || "";
       if (filePath) {
@@ -19718,11 +19718,11 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issue)("echo", enabled ? "on" : "off");
     }
     exports2.setCommandEcho = setCommandEcho;
-    function setFailed2(message) {
+    function setFailed3(message) {
       process.exitCode = ExitCode.Failure;
       error(message);
     }
-    exports2.setFailed = setFailed2;
+    exports2.setFailed = setFailed3;
     function isDebug() {
       return process.env["RUNNER_DEBUG"] === "1";
     }
@@ -19735,10 +19735,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports2.error = error;
-    function warning2(message, properties = {}) {
+    function warning(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports2.warning = warning2;
+    exports2.warning = warning;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -21451,12 +21451,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning2) {
+    function warn(logLevel, warning) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning2);
+          node_process.emitWarning(warning);
         else
-          console.warn(warning2);
+          console.warn(warning);
       }
     }
     exports2.debug = debug;
@@ -24925,9 +24925,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning2) => {
+        this.onError = (source, code, message, warning) => {
           const pos = getErrorPos(source);
-          if (warning2)
+          if (warning)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -25000,10 +25000,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning2) => {
+            this.directives.add(token.source, (offset, message, warning) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -27045,7 +27045,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
+      doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -27135,7 +27135,7 @@ var require_dist = __commonJS({
   }
 });
 
-// rollback/src/index.ts
+// status/src/index.ts
 var core2 = __toESM(require_core(), 1);
 
 // packages/core/src/errors.ts
@@ -27927,281 +27927,237 @@ function resolveTargets(config, options) {
   return targets;
 }
 
-// packages/core/src/rollback.ts
-var HEAD_NOT_REVERTED_WARNING = "\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u306F\u30C7\u30D7\u30ED\u30A4\u306E\u53C2\u7167\u5148\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u5909\u66F4\u3059\u308B\u3060\u3051\u3067\u3001\u30B9\u30AF\u30EA\u30D7\u30C8\u306E HEAD\uFF08\u30A8\u30C7\u30A3\u30BF\u4E0A\u306E\u30BD\u30FC\u30B9\uFF09\u306F\u5143\u306B\u623B\u308A\u307E\u305B\u3093\u3002\u30EA\u30DD\u30B8\u30C8\u30EA\u5074\u3082 revert \u3057\u306A\u3044\u3068\u3001\u6B21\u56DE\u306E\u30C7\u30D7\u30ED\u30A4\u3067\u554F\u984C\u306E\u3042\u308B\u30B3\u30FC\u30C9\u304C\u518D\u3073\u672C\u756A\u306B\u53CD\u6620\u3055\u308C\u307E\u3059";
-var STABILITY_ATTEMPTS = 6;
-var STABILITY_DELAY_MS = 2e3;
-async function getDeploymentStable(client, scriptId, deploymentId, sleep) {
-  let previous = await client.getDeployment(scriptId, deploymentId);
-  for (let attempt = 1; attempt < STABILITY_ATTEMPTS; attempt += 1) {
-    await sleep(STABILITY_DELAY_MS);
-    const current = await client.getDeployment(scriptId, deploymentId);
-    if (current.versionNumber === previous.versionNumber) {
-      return { deployment: current, stable: true };
-    }
-    previous = current;
+// packages/core/src/provenance.ts
+var PROVENANCE_PATTERN = /^ci sha=([0-9a-f]{7,40})(?: run=(\d+))?(?: pr=(\d+))?(?: by=([^\s|]+))?(?: \| ([\s\S]*))?$/;
+function parseVersionDescription(description) {
+  const match = PROVENANCE_PATTERN.exec(description);
+  if (match === null) {
+    return void 0;
   }
-  return { deployment: previous, stable: false };
+  const [, sha, runId, pr, actor, rest] = match;
+  if (sha === void 0) {
+    return void 0;
+  }
+  const provenance = { sha };
+  if (runId !== void 0) provenance.runId = runId;
+  if (pr !== void 0) provenance.pr = Number(pr);
+  if (actor !== void 0) provenance.actor = actor;
+  if (rest !== void 0 && rest !== "") provenance.description = rest;
+  return provenance;
 }
+
+// packages/core/src/status.ts
 function describeDeployment(deployment) {
-  const description = deployment.description ? `: ${deployment.description}` : "";
-  return `${deployment.deploymentId} (v${deployment.versionNumber})${description}`;
+  const version = deployment.versionNumber === void 0 ? "@HEAD" : `v${deployment.versionNumber}`;
+  return `${deployment.deploymentId} (${version})`;
 }
-function resolveTargetDeployment(deployments, deploymentId) {
-  const versioned = deployments.filter((entry) => entry.versionNumber !== void 0);
-  if (deploymentId !== void 0) {
-    const found = deployments.find((entry) => entry.deploymentId === deploymentId);
-    if (found === void 0) {
-      throw new GasDeployError(`\u30C7\u30D7\u30ED\u30A4 ${deploymentId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093`, {
-        nextSteps: [
-          "deployment-id \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E [\u30C7\u30D7\u30ED\u30A4] \u2192 [\u30C7\u30D7\u30ED\u30A4\u3092\u7BA1\u7406] \u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\uFF09",
-          versioned.length > 0 ? `\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4: ${versioned.map(describeDeployment).join(" / ")}` : "\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306B\u306F\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4\u304C\u3042\u308A\u307E\u305B\u3093"
-        ]
-      });
-    }
-    if (found.versionNumber === void 0) {
-      throw new GasDeployError(`\u30C7\u30D7\u30ED\u30A4 ${deploymentId} \u306F @HEAD\uFF08\u30D0\u30FC\u30B8\u30E7\u30F3\u672A\u56FA\u5B9A\uFF09\u306E\u305F\u3081\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3067\u304D\u307E\u305B\u3093`, {
-        nextSteps: [
-          "@HEAD \u306E\u30C7\u30D7\u30ED\u30A4\u306F\u5E38\u306B\u6700\u65B0\u306E\u30BD\u30FC\u30B9\u3092\u6307\u3059\u305F\u3081\u3001\u7279\u5B9A\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u306B\u623B\u3059\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093",
-          "\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u56FA\u5B9A\u3057\u305F\u30C7\u30D7\u30ED\u30A4\u306E ID \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-          "HEAD \u306E\u30BD\u30FC\u30B9\u81EA\u4F53\u3092\u623B\u3057\u305F\u3044\u5834\u5408\u306F\u3001\u30EA\u30DD\u30B8\u30C8\u30EA\u3092 revert \u3057\u3066\u901A\u5E38\u306E\u30C7\u30D7\u30ED\u30A4\u3092\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
-        ]
-      });
-    }
-    return found;
-  }
-  if (versioned.length === 0) {
-    throw new GasDeployError("\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3067\u304D\u308B\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4\u304C\u3042\u308A\u307E\u305B\u3093", {
+async function resolveTargetDeployment(client, scriptId) {
+  const deployments = await client.listDeployments(scriptId);
+  if (deployments.length === 0) {
+    throw new GasDeployError("\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306B\u306F\u30C7\u30D7\u30ED\u30A4\u304C\u3042\u308A\u307E\u305B\u3093", {
       nextSteps: [
-        "\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306B\u306F @HEAD \u306E\u30C7\u30D7\u30ED\u30A4\u3057\u304B\u3042\u308A\u307E\u305B\u3093\u3002@HEAD \u306F\u5E38\u306B\u6700\u65B0\u306E\u30BD\u30FC\u30B9\u3092\u6307\u3059\u305F\u3081\u3001\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u623B\u3059\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093",
-        "HEAD \u306E\u30BD\u30FC\u30B9\u81EA\u4F53\u3092\u623B\u3057\u305F\u3044\u5834\u5408\u306F\u3001\u30EA\u30DD\u30B8\u30C8\u30EA\u3092 revert \u3057\u3066\u901A\u5E38\u306E\u30C7\u30D7\u30ED\u30A4\u3092\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
+        "scriptId \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E\u300C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8A2D\u5B9A\u300D\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\uFF09",
+        "\u307E\u3060\u4E00\u5EA6\u3082\u30C7\u30D7\u30ED\u30A4\u3057\u3066\u3044\u306A\u3044\u5834\u5408\u306F\u3001\u5148\u306B deploy \u30A2\u30AF\u30B7\u30E7\u30F3\u3092\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
       ]
     });
   }
+  const versioned = deployments.filter((entry) => entry.versionNumber !== void 0);
   if (versioned.length > 1) {
     throw new GasDeployError(`\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4\u304C ${versioned.length} \u4EF6\u3042\u308B\u305F\u3081\u3001\u5BFE\u8C61\u3092\u81EA\u52D5\u3067\u7279\u5B9A\u3067\u304D\u307E\u305B\u3093`, {
       nextSteps: [
-        "deployment-id \u5165\u529B\u3067\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5BFE\u8C61\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044",
+        "deployment-id \u5165\u529B\u3067\u5BFE\u8C61\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044",
         `\u5019\u88DC: ${versioned.map(describeDeployment).join(" / ")}`
       ]
     });
   }
-  const only = versioned[0];
-  if (only === void 0) {
-    throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u306E\u89E3\u6C7A\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+  const onlyVersioned = versioned[0];
+  if (onlyVersioned !== void 0) {
+    return onlyVersioned;
   }
-  return only;
-}
-async function rollback(client, options) {
-  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const deployments = await client.listDeployments(options.scriptId);
-  const resolved = resolveTargetDeployment(deployments, options.deploymentId);
-  const { deployment: target, stable } = await getDeploymentStable(
-    client,
-    options.scriptId,
-    resolved.deploymentId,
-    sleep
-  );
-  if (!stable && options.versionNumber === void 0) {
-    throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u306E\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u78BA\u5B9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u8AAD\u307F\u53D6\u308A\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093\uFF09", {
+  if (deployments.length > 1) {
+    throw new GasDeployError(`\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u56FA\u5B9A\u3057\u305F\u30C7\u30D7\u30ED\u30A4\u304C\u306A\u304F\u3001@HEAD \u30C7\u30D7\u30ED\u30A4\u304C ${deployments.length} \u4EF6\u3042\u308A\u307E\u3059`, {
       nextSteps: [
-        "\u30C7\u30D7\u30ED\u30A4\u306E\u76F4\u5F8C\u306F\u3001Apps Script API \u304C\u3057\u3070\u3089\u304F\u53E4\u3044\u5024\u3092\u8FD4\u3059\u3053\u3068\u304C\u3042\u308A\u307E\u3059",
-        "version-number \u5165\u529B\u3067\u623B\u308A\u5148\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u660E\u793A\u3059\u308C\u3070\u3053\u306E\u554F\u984C\u306E\u5F71\u97FF\u3092\u53D7\u3051\u307E\u305B\u3093\uFF09",
-        "\u6570\u5341\u79D2\u5F85\u3063\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u3082\u89E3\u6D88\u3057\u307E\u3059"
+        "deployment-id \u5165\u529B\u3067\u5BFE\u8C61\u3092\u660E\u793A\u3057\u3066\u304F\u3060\u3055\u3044",
+        `\u5019\u88DC: ${deployments.map(describeDeployment).join(" / ")}`
       ]
     });
   }
-  const fromVersion = target.versionNumber;
-  if (fromVersion === void 0) {
-    throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
+  const onlyDeployment = deployments[0];
+  if (onlyDeployment === void 0) {
+    throw new GasDeployError("\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u306E\u89E3\u6C7A\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
   }
-  let toVersion;
-  if (options.versionNumber !== void 0) {
-    toVersion = options.versionNumber;
+  return onlyDeployment;
+}
+async function getDeploymentStatus(client, options) {
+  let deployment;
+  if (options.deploymentId === void 0) {
+    deployment = await resolveTargetDeployment(client, options.scriptId);
   } else {
-    if (fromVersion <= 1) {
-      throw new GasDeployError(
-        `\u30C7\u30D7\u30ED\u30A4\u306F\u6700\u521D\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\uFF08v${fromVersion}\uFF09\u3092\u6307\u3057\u3066\u3044\u308B\u305F\u3081\u3001\u623B\u308A\u5148\u304C\u3042\u308A\u307E\u305B\u3093`,
-        {
+    try {
+      deployment = await client.getDeployment(options.scriptId, options.deploymentId);
+    } catch (error) {
+      if (error instanceof GasDeployError && error.code === "not-found") {
+        const deployments = await client.listDeployments(options.scriptId);
+        throw new GasDeployError(`\u30C7\u30D7\u30ED\u30A4 ${options.deploymentId} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093`, {
           nextSteps: [
-            "\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5148\u3068\u306A\u308B\u904E\u53BB\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u304C\u5B58\u5728\u3057\u307E\u305B\u3093",
-            "version-number \u5165\u529B\u3067\u623B\u308A\u5148\u3092\u660E\u793A\u3059\u308B\u3068\u3001\u305D\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u6307\u5B9A\u3067\u304D\u307E\u3059"
+            "deployment-id \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E [\u30C7\u30D7\u30ED\u30A4] \u2192 [\u30C7\u30D7\u30ED\u30A4\u3092\u7BA1\u7406] \u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\uFF09",
+            deployments.length > 0 ? `\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u30C7\u30D7\u30ED\u30A4: ${deployments.map(describeDeployment).join(" / ")}` : "\u3053\u306E\u30B9\u30AF\u30EA\u30D7\u30C8\u306B\u306F\u30C7\u30D7\u30ED\u30A4\u304C\u3042\u308A\u307E\u305B\u3093"
           ]
-        }
-      );
+        });
+      }
+      throw error;
     }
-    toVersion = fromVersion - 1;
   }
-  const warnings = [HEAD_NOT_REVERTED_WARNING];
-  if (!stable) {
-    warnings.push(
-      `\u30C7\u30D7\u30ED\u30A4\u306E\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u8AAD\u307F\u53D6\u308A\u304C\u5B89\u5B9A\u3057\u3066\u3044\u307E\u305B\u3093\u3002\u623B\u308A\u5148\u306E v${options.versionNumber} \u306F\u6307\u5B9A\u3069\u304A\u308A\u3067\u3059\u304C\u3001\u73FE\u5728\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3068\u3057\u3066\u8868\u793A\u3057\u3066\u3044\u308B v${fromVersion} \u306F\u5B9F\u969B\u3068\u7570\u306A\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059`
-    );
+  const status = { deploymentId: deployment.deploymentId };
+  if (deployment.webAppUrl !== void 0) status.webAppUrl = deployment.webAppUrl;
+  if (deployment.versionNumber === void 0) {
+    return status;
   }
-  if (toVersion === fromVersion) {
-    warnings.push(`\u30C7\u30D7\u30ED\u30A4\u306F\u3059\u3067\u306B v${toVersion} \u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002\u5909\u66F4\u306F\u884C\u3044\u307E\u305B\u3093\u3067\u3057\u305F`);
-    return { rolledBack: false, deploymentId: resolved.deploymentId, fromVersion, toVersion, warnings };
+  status.versionNumber = deployment.versionNumber;
+  const version = await client.getVersion(options.scriptId, deployment.versionNumber);
+  if (version.createTime !== void 0) status.createdAt = version.createTime;
+  if (version.description !== void 0) {
+    status.description = version.description;
+    const provenance = parseVersionDescription(version.description);
+    if (provenance !== void 0) status.provenance = provenance;
   }
-  let version;
-  try {
-    version = await client.getVersion(options.scriptId, toVersion);
-  } catch (error) {
-    if (error instanceof GasDeployError && error.status === 404) {
-      throw new GasDeployError(`\u30D0\u30FC\u30B8\u30E7\u30F3 ${toVersion} \u306F\u5B58\u5728\u3057\u307E\u305B\u3093`, {
-        cause: error,
-        nextSteps: [
-          "\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E [\u30C7\u30D7\u30ED\u30A4] \u2192 [\u30C7\u30D7\u30ED\u30A4\u3092\u7BA1\u7406] \u3067\u3001\u5B9F\u5728\u3059\u308B\u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-          `\u73FE\u5728\u30C7\u30D7\u30ED\u30A4\u3055\u308C\u3066\u3044\u308B\u306E\u306F v${fromVersion} \u3067\u3059`,
-          "scriptId \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u81EA\u4F53\u304C\u5B58\u5728\u3057\u306A\u3044\u5834\u5408\u3082 404 \u306B\u306A\u308A\u307E\u3059\uFF09"
-        ]
-      });
-    }
-    throw error;
-  }
-  if (toVersion > fromVersion) {
-    warnings.push(
-      `\u6307\u5B9A\u3055\u308C\u305F v${toVersion} \u306F\u73FE\u5728\u306E v${fromVersion} \u3088\u308A\u65B0\u3057\u3044\u30D0\u30FC\u30B8\u30E7\u30F3\u3067\u3059\u3002\u3053\u308C\u306F\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3067\u306F\u306A\u304F\u30ED\u30FC\u30EB\u30D5\u30A9\u30EF\u30FC\u30C9\u3067\u3059`
-    );
-  }
-  const result = {
-    rolledBack: false,
-    deploymentId: resolved.deploymentId,
-    fromVersion,
-    toVersion,
-    warnings
-  };
-  if (version.description !== void 0) result.toVersionDescription = version.description;
-  if (version.createTime !== void 0) result.toVersionCreateTime = version.createTime;
-  if (options.dryRun) {
-    return result;
-  }
-  const description = options.description ?? `rollback to v${toVersion} (was v${fromVersion})`;
-  const updated = await client.updateDeployment(options.scriptId, resolved.deploymentId, toVersion, description);
-  result.rolledBack = true;
-  if (updated.webAppUrl !== void 0) result.webAppUrl = updated.webAppUrl;
-  return result;
+  return status;
 }
 
-// rollback/src/main.ts
+// status/src/main.ts
 var core = __toESM(require_core(), 1);
 
-// rollback/src/summary.ts
-function renderRollbackSummary(result) {
-  const lines = ["## GAS \u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u7D50\u679C", ""];
-  if (result.rolledBack) {
-    lines.push(`\u30C7\u30D7\u30ED\u30A4 \`${result.deploymentId}\` \u3092 **v${result.fromVersion} \u2192 v${result.toVersion}** \u306B\u623B\u3057\u307E\u3057\u305F\u3002`, "");
-  } else if (result.fromVersion === result.toVersion) {
-    lines.push(`\u30C7\u30D7\u30ED\u30A4 \`${result.deploymentId}\` \u306F\u3059\u3067\u306B **v${result.toVersion}** \u3092\u6307\u3057\u3066\u3044\u307E\u3059\u3002\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002`, "");
-  } else {
-    lines.push(
-      `**dry-run**: \u30C7\u30D7\u30ED\u30A4 \`${result.deploymentId}\` \u3092 **v${result.fromVersion} \u2192 v${result.toVersion}** \u306B\u623B\u3057\u307E\u3059\u3002\u5B9F\u969B\u306E\u5909\u66F4\u306F\u884C\u3063\u3066\u3044\u307E\u305B\u3093\u3002`,
-      ""
+// status/src/summary.ts
+function cell(value) {
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, " ");
+}
+function renderCommit(result) {
+  if (result.error !== void 0) {
+    return `\u53D6\u5F97\u5931\u6557: ${result.error}`;
+  }
+  if (result.managed && result.sha !== void 0) {
+    const extras = [];
+    if (result.pr !== void 0) extras.push(`PR #${result.pr}`);
+    if (result.actor !== void 0) extras.push(`by ${result.actor}`);
+    const suffix = extras.length > 0 ? `\uFF08${extras.join(", ")}\uFF09` : "";
+    return `\`${result.sha.slice(0, 7)}\`${suffix}`;
+  }
+  if (result.versionNumber === void 0) {
+    return "@HEAD\uFF08\u30D0\u30FC\u30B8\u30E7\u30F3\u672A\u56FA\u5B9A\u306E\u305F\u3081\u7531\u6765\u306A\u3057\uFF09";
+  }
+  return "CI \u7BA1\u7406\u5916\uFF08\u3053\u306E\u30A2\u30AF\u30B7\u30E7\u30F3\u4EE5\u5916\u3067\u4F5C\u3089\u308C\u305F\u30D0\u30FC\u30B8\u30E7\u30F3\uFF09";
+}
+function renderVersion(result) {
+  if (result.error !== void 0) return "\u2014";
+  return result.versionNumber === void 0 ? "@HEAD" : `v${result.versionNumber}`;
+}
+function renderStatusSummary(results) {
+  if (results.length === 0) {
+    return ["## GAS \u30C7\u30D7\u30ED\u30A4\u72B6\u6CC1", "", "\u5BFE\u8C61\u304C0 \u4EF6\u3067\u3057\u305F\u3002projects \u3084 environment \u306E\u6307\u5B9A\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002", ""].join(
+      "\n"
     );
   }
-  const facts = [];
-  if (result.toVersionDescription !== void 0) {
-    facts.push(`- \u623B\u308A\u5148\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u8AAC\u660E: ${result.toVersionDescription}`);
+  const lines = [
+    "## GAS \u30C7\u30D7\u30ED\u30A4\u72B6\u6CC1",
+    "",
+    "| \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8 | \u74B0\u5883 | \u30D0\u30FC\u30B8\u30E7\u30F3 | \u30B3\u30DF\u30C3\u30C8 | \u4F5C\u6210\u65E5\u6642 |",
+    "|---|---|---|---|---|"
+  ];
+  for (const result of results) {
+    lines.push(
+      [
+        "",
+        cell(result.project ?? "\u2014"),
+        cell(result.environment ?? "\u2014"),
+        cell(renderVersion(result)),
+        cell(renderCommit(result)),
+        cell(result.createdAt ?? "\u2014"),
+        ""
+      ].join(" | ")
+    );
   }
-  if (result.toVersionCreateTime !== void 0) {
-    facts.push(`- \u623B\u308A\u5148\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u4F5C\u6210\u65E5\u6642: ${result.toVersionCreateTime}`);
-  }
-  if (result.webAppUrl !== void 0) {
-    facts.push(`- Web \u30A2\u30D7\u30EA URL: ${result.webAppUrl}\uFF08\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3067\u306F\u5909\u308F\u308A\u307E\u305B\u3093\uFF09`);
-  }
-  if (facts.length > 0) lines.push(...facts, "");
-  if (result.warnings.length > 0) {
-    lines.push("### \u26A0\uFE0F \u8B66\u544A", "", ...result.warnings.map((warning2) => `- ${warning2}`), "");
+  lines.push("");
+  const failed = results.filter((result) => result.error !== void 0);
+  if (failed.length > 0) {
+    lines.push(`**${failed.length} \u4EF6\u306E\u5BFE\u8C61\u3067\u72B6\u6CC1\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002** \u4E0A\u306E\u8868\u306E\u300C\u53D6\u5F97\u5931\u6557\u300D\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002`, "");
   }
   return lines.join("\n");
 }
 
-// rollback/src/main.ts
-function parseBooleanInput(name) {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
-      cause: error,
-      nextSteps: [
-        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
-        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
+// status/src/main.ts
+function parseProjectsInput(raw) {
+  return raw.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
 }
-function parseVersionNumberInput(raw) {
-  const trimmed = raw.trim();
-  if (trimmed === "") {
-    return void 0;
-  }
-  const invalid = () => {
-    throw new GasDeployError(`version-number \u306B\u306F 1 \u4EE5\u4E0A\u306E\u6574\u6570\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u5B9F\u969B\u306E\u5024: ${raw}\uFF09`, {
-      nextSteps: [
-        "\u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u306F 1 \u304B\u3089\u59CB\u307E\u308B\u6574\u6570\u3067\u3059\u3002\u5C0F\u6570\u3084\u6307\u6570\u8868\u8A18\u306F\u4F7F\u3048\u307E\u305B\u3093",
-        "\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E [\u30C7\u30D7\u30ED\u30A4] \u2192 [\u30C7\u30D7\u30ED\u30A4\u3092\u7BA1\u7406] \u3067\u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-        "1\u3064\u524D\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u306B\u623B\u3059\u5834\u5408\u306F version-number \u3092\u7701\u7565\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  };
-  if (!/^\d+$/.test(trimmed)) {
-    invalid();
-  }
-  const value = Number(trimmed);
-  if (!Number.isSafeInteger(value) || value < 1) {
-    invalid();
-  }
-  return value;
-}
-function resolveConfigTarget(yamlText, environment, project, env) {
-  if (project === "all") {
-    throw new GasDeployError('project \u306B "all" \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u306F\u4E00\u5EA6\u306B1\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u307F\u3092\u5BFE\u8C61\u3068\u3057\u307E\u3059', {
-      nextSteps: [
-        "\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3059\u308B\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u540D\u30921\u3064\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-        "\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3092\u623B\u3059\u5FC5\u8981\u304C\u3042\u308B\u5834\u5408\u306F\u3001\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3054\u3068\u306B\u3053\u306E Action \u3092\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044",
-        "\u969C\u5BB3\u6642\u306B\u7121\u95A2\u4FC2\u306A\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u307E\u3067\u5DFB\u304D\u623B\u3055\u306A\u3044\u305F\u3081\u306E\u5236\u7D04\u3067\u3059"
-      ]
-    });
-  }
+function resolveStatusTargets(yamlText, options) {
   const config = parseConfig(yamlText);
-  const targets = resolveTargets(config, { environment, projects: [project], env });
-  if (targets.length > 1) {
-    throw new GasDeployError(`${project} (${environment}) \u304C ${targets.length} \u4EF6\u306E\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5BFE\u8C61\u306B\u89E3\u6C7A\u3055\u308C\u307E\u3057\u305F`, {
-      nextSteps: ["gasdeploy.yml \u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5B9A\u7FA9\u306B\u91CD\u8907\u304C\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"]
-    });
-  }
-  const target = targets[0];
-  if (target === void 0) {
-    throw new GasDeployError(`${project} (${environment}) \u306E\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u5BFE\u8C61\u3092\u89E3\u6C7A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F`, {
+  const targets = resolveTargets(config, {
+    environment: options.environment,
+    projects: [...options.projects],
+    env: options.env
+  });
+  if (options.deploymentIdInput && targets.length > 1) {
+    throw new GasDeployError("deployment-id \u3092\u6307\u5B9A\u3057\u305F\u5834\u5408\u3001\u5BFE\u8C61\u306F1\u3064\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u9650\u3089\u308C\u307E\u3059", {
       nextSteps: [
-        "gasdeploy.yml \u306B\u8A72\u5F53\u3059\u308B\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068 environment \u304C\u5B9A\u7FA9\u3055\u308C\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+        "deployment-id \u306F\u30B9\u30AF\u30EA\u30D7\u30C8\u3054\u3068\u306B\u7570\u306A\u308B ID \u306E\u305F\u3081\u3001\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306B\u540C\u3058\u5024\u3092\u5F53\u3066\u306F\u3081\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093",
+        "projects \u5165\u529B\u30921\u3064\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u540D\u306B\u7D5E\u3063\u3066\u304F\u3060\u3055\u3044\uFF08\u307E\u305F\u306F script-id \u5165\u529B\u3067\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\uFF09",
+        "deployment-id \u3092\u7701\u7565\u3059\u308B\u3068\u3001\u5404\u5BFE\u8C61\u306E\u30C7\u30D7\u30ED\u30A4\u3092\u305D\u308C\u305E\u308C\u81EA\u52D5\u3067\u7279\u5B9A\u3057\u307E\u3059"
       ]
     });
   }
-  return target.deploymentId === void 0 ? { scriptId: target.scriptId } : { scriptId: target.scriptId, deploymentId: target.deploymentId };
+  return targets.map((target) => {
+    const deploymentId = options.deploymentIdInput || target.deploymentId;
+    return {
+      project: target.project,
+      environment: target.environment,
+      scriptId: target.scriptId,
+      ...deploymentId ? { deploymentId } : {}
+    };
+  });
+}
+function toTargetResult(target, outcome) {
+  const result = { scriptId: target.scriptId, managed: false };
+  if (target.project !== void 0) result.project = target.project;
+  if (target.environment !== void 0) result.environment = target.environment;
+  if ("error" in outcome) {
+    const error = outcome.error;
+    result.error = error instanceof Error ? error.message : String(error);
+    return result;
+  }
+  const status = outcome.status;
+  result.deploymentId = status.deploymentId;
+  if (status.versionNumber !== void 0) result.versionNumber = status.versionNumber;
+  if (status.createdAt !== void 0) result.createdAt = status.createdAt;
+  if (status.webAppUrl !== void 0) result.webAppUrl = status.webAppUrl;
+  const provenance = status.provenance;
+  if (provenance !== void 0) {
+    result.managed = true;
+    result.sha = provenance.sha;
+    if (provenance.runId !== void 0) result.runId = provenance.runId;
+    if (provenance.pr !== void 0) result.pr = provenance.pr;
+    if (provenance.actor !== void 0) result.actor = provenance.actor;
+  }
+  return result;
 }
 async function run() {
-  const versionNumber = parseVersionNumberInput(core.getInput("version-number"));
-  const dryRun = parseBooleanInput("dry-run");
-  const descriptionInput = core.getInput("description");
-  const deploymentIdInput = core.getInput("deployment-id");
   const scriptIdInput = core.getInput("script-id");
-  let target;
+  const deploymentIdInput = core.getInput("deployment-id");
+  let targets;
   if (scriptIdInput) {
-    target = { scriptId: scriptIdInput };
+    targets = [
+      { scriptId: scriptIdInput, ...deploymentIdInput ? { deploymentId: deploymentIdInput } : {} }
+    ];
   } else {
     const environment = core.getInput("environment");
-    const project = core.getInput("project");
-    if (!environment || !project) {
-      throw new GasDeployError("config \u30E2\u30FC\u30C9\u3067\u306F environment \u3068 project \u306E\u4E21\u65B9\u306E\u6307\u5B9A\u304C\u5FC5\u8981\u3067\u3059", {
+    if (!environment) {
+      throw new GasDeployError("environment \u306E\u6307\u5B9A\u304C\u5FC5\u8981\u3067\u3059\uFF08config \u30E2\u30FC\u30C9\u3067\u306F\u5FC5\u9808\u3067\u3059\uFF09", {
         nextSteps: [
           "environment \u5165\u529B\u306B gasdeploy.yml \u3067\u5B9A\u7FA9\u3057\u305F\u74B0\u5883\u540D\uFF08\u4F8B: prod\uFF09\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-          "project \u5165\u529B\u306B\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u3059\u308B\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u540D\u30921\u3064\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-          "\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u306F\u4E00\u5EA6\u306B1\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u307F\u3092\u5BFE\u8C61\u3068\u3057\u307E\u3059\u3002\u969C\u5BB3\u6642\u306B\u7121\u95A2\u4FC2\u306A\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u307E\u3067\u5DFB\u304D\u623B\u3055\u306A\u3044\u305F\u3081\u306E\u5236\u7D04\u3067\u3059",
           "gasdeploy.yml \u3092\u4F7F\u308F\u306A\u3044\u5834\u5408\u306F script-id \u5165\u529B\u3067\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044"
         ]
       });
     }
     const configPath = core.getInput("config") || "gasdeploy.yml";
+    const projects = parseProjectsInput(core.getInput("projects") || "all");
     const yamlText = await readConfigFile(configPath, {
       notFoundSteps: [
         "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
@@ -28209,35 +28165,53 @@ async function run() {
         "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
       ]
     });
-    target = resolveConfigTarget(yamlText, environment, project, process.env);
+    targets = resolveStatusTargets(yamlText, { environment, projects, deploymentIdInput, env: process.env });
   }
-  const deploymentId = deploymentIdInput || target.deploymentId;
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
   const accessToken = await getAccessToken(credentials);
   core.setSecret(accessToken);
-  const result = await rollback(new AppsScriptClient(accessToken), {
-    scriptId: target.scriptId,
-    ...deploymentId ? { deploymentId } : {},
-    ...versionNumber !== void 0 ? { versionNumber } : {},
-    dryRun,
-    ...descriptionInput ? { description: descriptionInput } : {}
-  });
-  for (const warning2 of result.warnings) {
-    core.warning(warning2);
+  const client = new AppsScriptClient(accessToken);
+  const results = [];
+  for (const target of targets) {
+    try {
+      const status = await getDeploymentStatus(client, {
+        scriptId: target.scriptId,
+        ...target.deploymentId ? { deploymentId: target.deploymentId } : {}
+      });
+      results.push(toTargetResult(target, { status }));
+    } catch (error) {
+      results.push(toTargetResult(target, { error }));
+    }
   }
-  const summary2 = renderRollbackSummary(result);
-  core.setOutput("rolled-back", String(result.rolledBack));
-  core.setOutput("from-version", String(result.fromVersion));
-  core.setOutput("to-version", String(result.toVersion));
-  core.setOutput("deployment-id", result.deploymentId);
-  core.setOutput("web-app-url", result.webAppUrl ?? "");
+  const summary2 = renderStatusSummary(results);
   core.setOutput("summary", summary2);
+  if (scriptIdInput) {
+    const only = results[0];
+    if (only === void 0) {
+      throw new GasDeployError("\u5BFE\u8C61\u306E\u89E3\u6C7A\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+    }
+    core.setOutput("managed", String(only.managed));
+    core.setOutput("version-number", only.versionNumber ?? "");
+    core.setOutput("sha", only.sha ?? "");
+    core.setOutput("run-id", only.runId ?? "");
+    core.setOutput("pr", only.pr ?? "");
+    core.setOutput("actor", only.actor ?? "");
+    core.setOutput("created-at", only.createdAt ?? "");
+    core.setOutput("deployment-id", only.deploymentId ?? "");
+    core.setOutput("web-app-url", only.webAppUrl ?? "");
+  } else {
+    core.setOutput("targets", JSON.stringify(results));
+  }
   await core.summary.addRaw(summary2).write();
+  const failed = results.filter((result) => result.error !== void 0);
+  if (failed.length > 0) {
+    core.setFailed(`${failed.length} \u4EF6\u306E\u5BFE\u8C61\u3067\u72B6\u6CC1\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F`);
+  }
 }
 
-// rollback/src/index.ts
+// status/src/index.ts
 void run().catch((error) => {
   if (error instanceof GasDeployError) {
     core2.setFailed(error.format());

@@ -28910,12 +28910,17 @@ var GasDeployError = class extends Error {
   nextSteps;
   /** API 由来のエラーの場合のみ設定される。`format()` には現れない。 */
   status;
+  /** 失敗の種別。分類済みのエラーにのみ設定される。`format()` には現れない。 */
+  code;
   constructor(message, details = {}) {
     super(message, { cause: details.cause });
     this.name = "GasDeployError";
     this.nextSteps = details.nextSteps ?? [];
     if (details.status !== void 0) {
       this.status = details.status;
+    }
+    if (details.code !== void 0) {
+      this.code = details.code;
     }
   }
   format() {
@@ -28932,6 +28937,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script API \u306E\u8A8D\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F (401)", {
       cause: body,
       status,
+      code: "unauthorized",
       nextSteps: [
         "refresh token \u304C\u5931\u52B9\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002OAuth \u540C\u610F\u753B\u9762\u304C\u300C\u30C6\u30B9\u30C8\u300D\u72B6\u614B\u306E\u5834\u5408\u3001refresh token \u306F7\u65E5\u3067\u5931\u52B9\u3057\u307E\u3059\u3002\u300C\u672C\u756A\u300D\u307E\u305F\u306F\u300C\u5185\u90E8\u300D\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044",
         "\u30C7\u30D7\u30ED\u30A4\u306B\u4F7F\u3046 Google \u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -28945,6 +28951,7 @@ function classifyApiError(status, body) {
       return new GasDeployError("Apps Script API \u304C\u6709\u52B9\u5316\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (403)", {
         cause: body,
         status,
+        code: "api-disabled",
         nextSteps: [
           "https://script.google.com/home/usersettings \u3092\u958B\u304D\u300CGoogle Apps Script API\u300D\u3092\u30AA\u30F3\u306B\u3057\u3066\u304F\u3060\u3055\u3044",
           "GCP \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5074\u3067\u3082 Apps Script API \u3092\u6709\u52B9\u5316\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -28955,6 +28962,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3078\u306E\u30A2\u30AF\u30BB\u30B9\u304C\u62D2\u5426\u3055\u308C\u307E\u3057\u305F (403)", {
       cause: body,
       status,
+      code: "access-denied",
       nextSteps: [
         "\u8A8D\u8A3C\u306B\u4F7F\u3063\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u3001\u5BFE\u8C61\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u7DE8\u96C6\u6A29\u9650\u304C\u3042\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
         "\u8981\u6C42\u30B9\u30B3\u30FC\u30D7\u306B script.projects \u3068 script.deployments \u304C\u542B\u307E\u308C\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
@@ -28965,6 +28973,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093 (404)", {
       cause: body,
       status,
+      code: "not-found",
       nextSteps: [
         "scriptId \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E\u300C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8A2D\u5B9A\u300D\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\uFF09",
         "\u8A8D\u8A3C\u306B\u4F7F\u3063\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u3001\u5BFE\u8C61\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u95B2\u89A7\u6A29\u9650\u304C\u3042\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
@@ -28974,6 +28983,7 @@ function classifyApiError(status, body) {
   return new GasDeployError(`Apps Script API \u304C\u30A8\u30E9\u30FC\u3092\u8FD4\u3057\u307E\u3057\u305F (${status})`, {
     cause: body,
     status,
+    code: "api-error",
     nextSteps: ["\u3057\u3070\u3089\u304F\u5F85\u3063\u3066\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044", "Google Workspace \u306E\u30B9\u30C6\u30FC\u30BF\u30B9\u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9\u3067\u969C\u5BB3\u60C5\u5831\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"]
   });
 }
@@ -29107,6 +29117,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   } catch (cause) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
       cause,
+      code: "connectivity",
       nextSteps: CONNECTIVITY_NEXT_STEPS
     });
   }
@@ -29116,6 +29127,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   } catch (cause) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", {
       cause,
+      code: "connectivity",
       nextSteps: CONNECTIVITY_NEXT_STEPS
     });
   }
@@ -29133,6 +29145,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
       isScopeProblem ? `\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})` : `\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`,
       {
         cause: text,
+        code: isScopeProblem ? "insufficient-scope" : "token-invalid",
         nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS
       }
     );
@@ -29142,12 +29155,14 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
     parsed = JSON.parse(text);
   } catch {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
+      code: "response-invalid",
       nextSteps: PARSE_FAILURE_NEXT_STEPS
     });
   }
   const accessToken = typeof parsed === "object" && parsed !== null ? parsed.access_token : void 0;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u306B access_token \u304C\u542B\u307E\u308C\u3066\u3044\u307E\u305B\u3093", {
+      code: "response-invalid",
       nextSteps: EXPIRY_NEXT_STEPS
     });
   }
@@ -29604,6 +29619,7 @@ async function deploy(client, options) {
 }
 
 // packages/core/src/config.ts
+var import_promises2 = require("node:fs/promises");
 var import_yaml = __toESM(require_dist(), 1);
 var VALID_PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
 function fail(path, message, nextSteps) {
@@ -29622,6 +29638,25 @@ function parseStringArray(value, path) {
     }
     return item;
   });
+}
+async function readConfigFile(path, options) {
+  try {
+    return await (0, import_promises2.readFile)(path, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093: ${path}`, {
+        cause: error,
+        nextSteps: [...options.notFoundSteps]
+      });
+    }
+    throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F: ${path}`, {
+      cause: error,
+      nextSteps: [
+        "\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30D1\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+        "config \u30D1\u30B9\u304C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306B\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
 }
 function parseConfig(yamlText) {
   let raw;
@@ -29910,8 +29945,68 @@ async function deployAll(client, targets, deployImpl = deploy) {
   return { changed: completed.some((entry) => entry.result.changed), completed };
 }
 
+// packages/core/src/provenance.ts
+var MAX_DESCRIPTION_LENGTH = 250;
+var SEPARATOR = " | ";
+var MIN_USER_BUDGET = 8;
+var PROVENANCE_PATTERN = /^ci sha=([0-9a-f]{7,40})(?: run=(\d+))?(?: pr=(\d+))?(?: by=([^\s|]+))?(?: \| ([\s\S]*))?$/;
+function parseVersionDescription(description) {
+  const match = PROVENANCE_PATTERN.exec(description);
+  if (match === null) {
+    return void 0;
+  }
+  const [, sha, runId, pr, actor, rest] = match;
+  if (sha === void 0) {
+    return void 0;
+  }
+  const provenance = { sha };
+  if (runId !== void 0) provenance.runId = runId;
+  if (pr !== void 0) provenance.pr = Number(pr);
+  if (actor !== void 0) provenance.actor = actor;
+  if (rest !== void 0 && rest !== "") provenance.description = rest;
+  return provenance;
+}
+function buildVersionDescription(source, userDescription) {
+  const user = userDescription?.trim() ?? "";
+  if (!source.sha) {
+    if (user === "") {
+      return { description: "manual", warnings: [] };
+    }
+    if (parseVersionDescription(user) !== void 0) {
+      return {
+        description: `manual${SEPARATOR}${user}`,
+        warnings: ["description \u304C\u7531\u6765\u60C5\u5831\u306E\u5F62\u3092\u3057\u3066\u3044\u305F\u305F\u3081\u3001CI \u7BA1\u7406\u5916\u3067\u3042\u308B\u3053\u3068\u3092\u793A\u3059\u63A5\u982D\u8F9E\u3092\u4ED8\u3051\u307E\u3057\u305F"]
+      };
+    }
+    return { description: user, warnings: [] };
+  }
+  const parts = [`ci sha=${source.sha}`];
+  if (source.runId) parts.push(`run=${source.runId}`);
+  if (source.pr !== void 0) parts.push(`pr=${source.pr}`);
+  if (source.actor) parts.push(`by=${source.actor}`);
+  const provenance = parts.join(" ");
+  if (user === "") {
+    return { description: provenance, warnings: [] };
+  }
+  const budget = MAX_DESCRIPTION_LENGTH - provenance.length - SEPARATOR.length;
+  if (budget < MIN_USER_BUDGET) {
+    return {
+      description: provenance,
+      warnings: ["\u7531\u6765\u60C5\u5831\u304C\u9577\u3044\u305F\u3081\u3001description \u3092\u30D0\u30FC\u30B8\u30E7\u30F3\u8AAC\u660E\u304B\u3089\u7701\u7565\u3057\u307E\u3057\u305F\uFF08\u7531\u6765\u306E\u8A18\u9332\u3092\u512A\u5148\u3057\u307E\u3059\uFF09"]
+    };
+  }
+  if (user.length <= budget) {
+    return { description: `${provenance}${SEPARATOR}${user}`, warnings: [] };
+  }
+  const truncated = `${user.slice(0, budget - 1)}\u2026`;
+  return {
+    description: `${provenance}${SEPARATOR}${truncated}`,
+    warnings: [`description \u304C\u9577\u3044\u305F\u3081 ${budget} \u6587\u5B57\u306B\u5207\u308A\u8A70\u3081\u307E\u3057\u305F`]
+  };
+}
+
 // deploy/src/main.ts
-var import_promises2 = require("node:fs/promises");
+var import_promises3 = require("node:fs/promises");
 var import_node_path2 = require("node:path");
 var core = __toESM(require_core(), 1);
 
@@ -30148,10 +30243,30 @@ function parseProjectType(raw) {
     nextSteps: [`\u6B21\u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${PROJECT_TYPES.join(" | ")}`]
   });
 }
-function defaultDescription() {
-  const sha = (process.env["GITHUB_SHA"] ?? "local").slice(0, 7);
-  const runNumber = process.env["GITHUB_RUN_NUMBER"] ?? "0";
-  return `ci-${sha}-${runNumber}`;
+async function readEventPayload(eventPath) {
+  try {
+    return JSON.parse(await (0, import_promises3.readFile)(eventPath, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+async function resolveProvenanceSource(env) {
+  const source = {};
+  const sha = env["GITHUB_SHA"];
+  if (sha) source.sha = sha;
+  const runId = env["GITHUB_RUN_ID"];
+  if (runId) source.runId = runId;
+  const actor = env["GITHUB_ACTOR"];
+  if (actor) source.actor = actor;
+  const eventPath = env["GITHUB_EVENT_PATH"];
+  if (eventPath) {
+    const payload = await readEventPayload(eventPath);
+    if (payload !== void 0) {
+      const pr = resolvePullRequestNumber(payload);
+      if (pr !== void 0) source.pr = pr;
+    }
+  }
+  return source;
 }
 function parseBooleanInput(name) {
   try {
@@ -30172,7 +30287,7 @@ async function resolveIgnorePatterns(rootDir, rawInput) {
     return fromInput;
   }
   try {
-    return parseClaspIgnore(await (0, import_promises2.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
+    return parseClaspIgnore(await (0, import_promises3.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") {
       return DEFAULT_IGNORE;
@@ -30193,29 +30308,6 @@ function parseProjectsInput(raw) {
     return void 0;
   }
   return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
-}
-async function readConfigFile(path) {
-  try {
-    return await (0, import_promises2.readFile)(path, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093: ${path}`, {
-        cause: error,
-        nextSteps: [
-          "\u5358\u4E00\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-          `\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F ${path} \u306B gasdeploy.yml \u5F62\u5F0F\u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-          "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-        ]
-      });
-    }
-    throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F: ${path}`, {
-      cause: error,
-      nextSteps: [
-        "\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30D1\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-        "config \u30D1\u30B9\u304C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306B\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
 }
 async function resolveTargetIgnore(target, ignoreInput) {
   if (target.ignore.length > 0) {
@@ -30282,10 +30374,8 @@ async function resolvePrCommentContext(env) {
   if (!owner || !repo) {
     return void 0;
   }
-  let payload;
-  try {
-    payload = JSON.parse(await (0, import_promises2.readFile)(eventPath, "utf8"));
-  } catch {
+  const payload = await readEventPayload(eventPath);
+  if (payload === void 0) {
     return void 0;
   }
   const prNumber = resolvePullRequestNumber(payload);
@@ -30338,6 +30428,11 @@ async function runSingleProject(scriptId) {
   const createVersion = parseBooleanInput("create-version");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput("ignore"));
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
+  for (const warning2 of versionDescription.warnings) {
+    core.warning(warning2);
+  }
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
@@ -30351,7 +30446,7 @@ async function runSingleProject(scriptId) {
     projectType,
     dryRun,
     createVersion,
-    description: descriptionInput || defaultDescription()
+    description: versionDescription.description
   });
   for (const warning2 of result.warnings) {
     core.warning(warning2);
@@ -30378,18 +30473,29 @@ async function runMultiProject() {
   }
   const configPath = core.getInput("config") || "gasdeploy.yml";
   const projects = parseProjectsInput(core.getInput("projects") || "all");
-  const yamlText = await readConfigFile(configPath);
+  const yamlText = await readConfigFile(configPath, {
+    notFoundSteps: [
+      "\u5358\u4E00\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
+      `\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F ${configPath} \u306B gasdeploy.yml \u5F62\u5F0F\u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+    ]
+  });
   const config = parseConfig(yamlText);
   const targets = resolveTargets(config, { environment, projects, env: process.env });
   const dryRun = parseBooleanInput("dry-run");
   const createVersion = parseBooleanInput("create-version");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const descriptionInput = core.getInput("description");
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
+  for (const warning2 of versionDescription.warnings) {
+    core.warning(warning2);
+  }
   const deployTargets = await buildDeployTargets(targets, {
     ignoreInput: core.getInput("ignore"),
     dryRun,
     createVersion,
-    description: descriptionInput || defaultDescription()
+    description: versionDescription.description
   });
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);

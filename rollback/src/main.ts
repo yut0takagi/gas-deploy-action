@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import * as core from '@actions/core';
 import {
   AppsScriptClient,
@@ -6,6 +5,7 @@ import {
   getAccessToken,
   parseConfig,
   parseCredentials,
+  readConfigFile,
   resolveTargets,
   rollback,
 } from '@gas-deploy/core';
@@ -57,36 +57,6 @@ export function parseVersionNumberInput(raw: string): number | undefined {
     invalid();
   }
   return value;
-}
-
-/**
- * config モードの設定ファイルを読み込む。
- *
- * deploy アクションにも同名の関数があるが、案内する次の手順が異なる（ロールバックは
- * project を単数で取り、all をサポートしない）ため、共通化せず個別に持つ。
- */
-export async function readConfigFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new GasDeployError(`設定ファイルが見つかりません: ${path}`, {
-        cause: error,
-        nextSteps: [
-          'scriptId を直接指定する場合は script-id 入力を使ってください',
-          `gasdeploy.yml を使う場合は ${path} に設定ファイルを作成してください`,
-          'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
-        ],
-      });
-    }
-    throw new GasDeployError(`設定ファイルを読み取れませんでした: ${path}`, {
-      cause: error,
-      nextSteps: [
-        '設定ファイルのパーミッションを確認してください',
-        'config パスがディレクトリになっていないか確認してください',
-      ],
-    });
-  }
 }
 
 export interface RollbackTarget {
@@ -171,7 +141,14 @@ export async function run(): Promise<void> {
       });
     }
     const configPath = core.getInput('config') || 'gasdeploy.yml';
-    target = resolveConfigTarget(await readConfigFile(configPath), environment, project, process.env);
+    const yamlText = await readConfigFile(configPath, {
+      notFoundSteps: [
+        'scriptId を直接指定する場合は script-id 入力を使ってください',
+        `gasdeploy.yml を使う場合は ${configPath} に設定ファイルを作成してください`,
+        'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
+      ],
+    });
+    target = resolveConfigTarget(yamlText, environment, project, process.env);
   }
 
   // deployment-id 入力は config の値より優先する。障害対応で config を書き換えずに

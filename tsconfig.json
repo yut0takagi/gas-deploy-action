@@ -5,6 +5,9 @@
     { "path": "./packages/setup-cli" },
     { "path": "./deploy" },
     { "path": "./rollback" },
-    { "path": "./tests" }
+    { "path": "./token-check" },
+    { "path": "./status" },
+    { "path": "./tests" },
+    { "path": "./scripts" }
   ]
 }

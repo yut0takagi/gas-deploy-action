@@ -5,16 +5,19 @@ import {
   AppsScriptClient,
   DEFAULT_IGNORE,
   GasDeployError,
+  buildVersionDescription,
   deploy,
   deployAll,
   getAccessToken,
   parseClaspIgnore,
   parseConfig,
   parseCredentials,
+  readConfigFile,
   resolveTargets,
   type DeployTarget,
   type MultiDeployResult,
   type ProjectType,
+  type ProvenanceSource,
   type ResolvedTarget,
 } from '@gas-deploy/core';
 import { resolvePullRequestNumber, upsertComment } from './comment.js';
@@ -31,10 +34,52 @@ export function parseProjectType(raw: string): ProjectType {
   });
 }
 
-function defaultDescription(): string {
-  const sha = (process.env['GITHUB_SHA'] ?? 'local').slice(0, 7);
-  const runNumber = process.env['GITHUB_RUN_NUMBER'] ?? '0';
-  return `ci-${sha}-${runNumber}`;
+/**
+ * イベントペイロードを読む。読めない・壊れている場合は undefined を返す。
+ *
+ * 由来情報と PR コメントの両方が同じファイルを必要とし、以前はそれぞれが readFile と
+ * JSON.parse と catch を個別に持っていた。片方だけを直したときに catch の範囲がずれる
+ * （実際にずれていた）ため1箇所にまとめる。JSON.parse は成功時に undefined を返さない
+ * ので、undefined は「取得できなかった」ことだけを意味する。
+ * cause は付けない（ペイロードには非公開のリポジトリ情報が含まれうる）。
+ */
+async function readEventPayload(eventPath: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(eventPath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 由来情報の材料を GHA の環境変数とイベントペイロードから集める。
+ *
+ * 各項目は独立に読む。揃っていることは前提にしない（Actions 外では全て欠けるが、
+ * それを保証するのは実行環境であってこの関数ではない）。「sha が無ければ由来情報を
+ * 作らない」という判断は buildVersionDescription 側が持つ。
+ */
+export async function resolveProvenanceSource(
+  env: Record<string, string | undefined>,
+): Promise<ProvenanceSource> {
+  const source: ProvenanceSource = {};
+
+  const sha = env['GITHUB_SHA'];
+  if (sha) source.sha = sha;
+  const runId = env['GITHUB_RUN_ID'];
+  if (runId) source.runId = runId;
+  const actor = env['GITHUB_ACTOR'];
+  if (actor) source.actor = actor;
+
+  const eventPath = env['GITHUB_EVENT_PATH'];
+  if (eventPath) {
+    const payload = await readEventPayload(eventPath);
+    if (payload !== undefined) {
+      const pr = resolvePullRequestNumber(payload);
+      if (pr !== undefined) source.pr = pr;
+    }
+  }
+
+  return source;
 }
 
 /** `core.getBooleanInput` の raw throw を、次の手順つきの `GasDeployError` に包み直す。 */
@@ -87,35 +132,6 @@ export function parseProjectsInput(raw: string): string[] | undefined {
     .split(',')
     .map((name) => name.trim())
     .filter((name) => name.length > 0);
-}
-
-/**
- * 複数プロジェクトモードの設定ファイルを読み込む。
- * 存在しない場合は、script-id を使う単一プロジェクトモードか、設定ファイルを
- * 追加するかのどちらが必要かを案内する `GasDeployError` にする。
- */
-export async function readConfigFile(path: string): Promise<string> {
-  try {
-    return await readFile(path, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new GasDeployError(`設定ファイルが見つかりません: ${path}`, {
-        cause: error,
-        nextSteps: [
-          '単一プロジェクトとしてデプロイする場合は script-id 入力を指定してください',
-          `複数プロジェクトとしてデプロイする場合は ${path} に gasdeploy.yml 形式の設定ファイルを作成してください`,
-          'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
-        ],
-      });
-    }
-    throw new GasDeployError(`設定ファイルを読み取れませんでした: ${path}`, {
-      cause: error,
-      nextSteps: [
-        '設定ファイルのパーミッションを確認してください',
-        'config パスがディレクトリになっていないか確認してください',
-      ],
-    });
-  }
 }
 
 /**
@@ -257,13 +273,10 @@ export async function resolvePrCommentContext(
     return undefined;
   }
 
-  let payload: unknown;
-  try {
-    payload = JSON.parse(await readFile(eventPath, 'utf8'));
-  } catch {
-    // ペイロードが読めない・壊れているのはコメントを諦めるに足る理由だが、
-    // デプロイを止める理由にはならない。cause は付けない（イベントペイロードには
-    // トークンこそ含まれないが、非公開のリポジトリ情報が含まれうる）。
+  // ペイロードが読めない・壊れているのはコメントを諦めるに足る理由だが、
+  // デプロイを止める理由にはならない。
+  const payload = await readEventPayload(eventPath);
+  if (payload === undefined) {
     return undefined;
   }
 
@@ -337,6 +350,11 @@ async function runSingleProject(scriptId: string): Promise<void> {
   const createVersion = parseBooleanInput('create-version');
   const commentOnPr = parseBooleanInput('comment-on-pr');
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput('ignore'));
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
+  for (const warning of versionDescription.warnings) {
+    core.warning(warning);
+  }
 
   const credentials = parseCredentials(core.getInput('credentials', { required: true }));
   core.setSecret(credentials.clientSecret);
@@ -353,7 +371,7 @@ async function runSingleProject(scriptId: string): Promise<void> {
     projectType,
     dryRun,
     createVersion,
-    description: descriptionInput || defaultDescription(),
+    description: versionDescription.description,
   });
 
   for (const warning of result.warnings) {
@@ -391,7 +409,13 @@ async function runMultiProject(): Promise<void> {
   const configPath = core.getInput('config') || 'gasdeploy.yml';
   const projects = parseProjectsInput(core.getInput('projects') || 'all');
 
-  const yamlText = await readConfigFile(configPath);
+  const yamlText = await readConfigFile(configPath, {
+    notFoundSteps: [
+      '単一プロジェクトとしてデプロイする場合は script-id 入力を指定してください',
+      `複数プロジェクトとしてデプロイする場合は ${configPath} に gasdeploy.yml 形式の設定ファイルを作成してください`,
+      'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
+    ],
+  });
   const config = parseConfig(yamlText);
   const targets = resolveTargets(config, { environment, projects, env: process.env });
 
@@ -399,11 +423,16 @@ async function runMultiProject(): Promise<void> {
   const createVersion = parseBooleanInput('create-version');
   const commentOnPr = parseBooleanInput('comment-on-pr');
   const descriptionInput = core.getInput('description');
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
+  for (const warning of versionDescription.warnings) {
+    core.warning(warning);
+  }
   const deployTargets = await buildDeployTargets(targets, {
     ignoreInput: core.getInput('ignore'),
     dryRun,
     createVersion,
-    description: descriptionInput || defaultDescription(),
+    description: versionDescription.description,
   });
 
   const credentials = parseCredentials(core.getInput('credentials', { required: true }));

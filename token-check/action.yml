@@ -1,0 +1,49 @@
+name: 'Check Google Apps Script credentials'
+description: 'refresh token が今も使えるかを確認します（何も書き換えません）'
+branding:
+  icon: 'activity'
+  color: 'yellow'
+
+inputs:
+  credentials:
+    description: 'clasp の .clasprc.json、または {client_id, client_secret, refresh_token} の JSON'
+    required: true
+  script-id:
+    description: >-
+      指定すると、トークンの交換に加えて実際にこのプロジェクトを読み取れるかまで確認します。
+      「トークンは生きているが Apps Script API を無効化された」「対象スクリプトの権限を
+      外された」はトークンの交換だけでは検知できません。
+    required: false
+  fail-on-invalid:
+    description: >-
+      認証情報が使えないと判定されたときにジョブを失敗させるかどうか。
+      false にすると警告のみになり、status 出力で判断できます。
+    required: false
+    default: 'true'
+  fail-on-unknown:
+    description: >-
+      有効かどうかを判定できなかったときにジョブを失敗させるかどうか。既定は false です。
+      到達できなかっただけで週次ジョブが赤くなると、本当に失効したときの赤が埋もれるためです。
+    required: false
+    default: 'false'
+
+outputs:
+  status:
+    description: >-
+      valid（有効）／ invalid（使えない。この状態ではデプロイが失敗する）／
+      unknown（判定できなかった。失効したとは限らない）のいずれか。
+  reason:
+    description: >-
+      判定の理由。ok / token-invalid / insufficient-scope / unauthorized / api-disabled /
+      access-denied / not-found / connectivity / response-invalid / api-error / unclassified。
+      メッセージ本文ではなくこの値で分岐してください。
+  project-checked:
+    description: 'script-id を指定して、プロジェクトの読み取りまで確認できたか（true / false）'
+  summary:
+    description: '人間可読のサマリ（Markdown）'
+
+runs:
+  using: 'node24'
+  # .cjs であること。token-check/package.json の "type": "module" により、
+  # .js だと Node が ESM として解釈して CJS バンドルが動かない。
+  main: 'dist/index.cjs'

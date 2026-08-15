@@ -1,0 +1,68 @@
+name: 'Show what is deployed to Google Apps Script'
+description: 'デプロイが指すバージョンと、そこに埋め込まれたコミット情報を表示します（何も書き換えません）'
+branding:
+  icon: 'search'
+  color: 'yellow'
+
+inputs:
+  credentials:
+    description: 'clasp の .clasprc.json、または {client_id, client_secret, refresh_token} の JSON'
+    required: true
+  script-id:
+    description: '対象の scriptId。指定すると config は読み込まれません'
+    required: false
+  deployment-id:
+    description: >-
+      対象のデプロイ ID。省略した場合、バージョン付きデプロイがちょうど1つのときだけ
+      自動で特定します。複数ある場合は候補を表示して失敗します。デプロイ ID は1つの
+      scriptId に固有のため、config モードで projects が複数プロジェクトに解決される
+      場合は指定できません（失敗します）。projects を1つのプロジェクトに絞るか、
+      script-id を使ってください。
+    required: false
+  config:
+    description: 'script-id が未指定のときに読み込む設定ファイルのパス'
+    required: false
+    default: 'gasdeploy.yml'
+  environment:
+    description: 'config モードで対象とする environment 名。config モードでは必須です'
+    required: false
+  projects:
+    description: 'config モードで対象とするプロジェクト名（カンマ区切り）。all で全プロジェクト'
+    required: false
+    default: 'all'
+
+outputs:
+  managed:
+    description: >-
+      由来情報を復元できたか（true / false）。false は「このアクション以外で作られた
+      バージョン」または「@HEAD デプロイ」を意味します。単一対象モードのみ。
+  version-number:
+    description: 'デプロイが指すバージョン番号（単一対象モードのみ）'
+  sha:
+    description: 'デプロイされているコミットの SHA（復元できた場合、単一対象モードのみ）'
+  run-id:
+    description: 'デプロイしたワークフロー実行の ID（同上）'
+  pr:
+    description: 'デプロイ元の PR 番号（同上）'
+  actor:
+    description: 'デプロイを実行したアカウント（同上）'
+  created-at:
+    description: 'バージョンの作成日時（単一対象モードのみ）'
+  deployment-id:
+    description: '対象となったデプロイの ID（単一対象モードのみ）'
+  web-app-url:
+    description: 'Web アプリの URL（該当する場合、単一対象モードのみ）'
+  summary:
+    description: '人間可読のサマリ（Markdown）'
+  targets:
+    description: >-
+      config モードでの各対象の結果（JSON 配列）。全対象を試行してから返すため、
+      一部が失敗しても他の結果が失われることはありません。各要素は project,
+      environment, scriptId, managed を必ず持ち、該当する場合のみ deploymentId,
+      versionNumber, sha, runId, pr, actor, createdAt, webAppUrl, error を含みます。
+
+runs:
+  using: 'node24'
+  # .cjs であること。status/package.json の "type": "module" により、
+  # .js だと Node が ESM として解釈して CJS バンドルが動かない。
+  main: 'dist/index.cjs'

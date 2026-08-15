@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./build",
+    "types": ["node"]
+  },
+  // E2E は週次にしか走らないため、型の誤りを実行時まで持ち越すと「動いていない週」に
+  // 気づくのがさらに遅れる。そのため型検査に載せる。
+  //
+  // spike-verify.ts は含めない。未確定事項を実 API で確かめるための使い捨てスクリプトで、
+  // core の内部モジュールを .ts 拡張子のパス直指定で読んでいる（NodeNext では型検査を
+  // 通せない）。恒久的に維持する対象ではないため、書き換えずに対象外とする。
+  "include": ["e2e.ts"],
+  "references": [{ "path": "../packages/core" }]
+}

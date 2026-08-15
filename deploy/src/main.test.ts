@@ -9,9 +9,9 @@ import {
   buildDeploymentsOutput,
   parseProjectsInput,
   parseProjectType,
-  readConfigFile,
   resolveIgnorePatterns,
   resolvePrCommentContext,
+  resolveProvenanceSource,
   resolveTargetIgnore,
 } from './main.js';
 
@@ -80,40 +80,6 @@ describe('parseProjectsInput', () => {
 
   it('drops empty entries caused by stray commas', () => {
     expect(parseProjectsInput('web-app,,sheet-tools,')).toEqual(['web-app', 'sheet-tools']);
-  });
-});
-
-describe('readConfigFile', () => {
-  it('returns the file contents when it exists', async () => {
-    const root = await makeTempDir();
-    const path = join(root, 'gasdeploy.yml');
-    await writeFile(path, 'version: 1\n', 'utf8');
-
-    await expect(readConfigFile(path)).resolves.toBe('version: 1\n');
-  });
-
-  it('throws a GasDeployError naming the path when the file is missing', async () => {
-    const root = await makeTempDir();
-    const path = join(root, 'missing.yml');
-
-    let error: unknown;
-    try {
-      await readConfigFile(path);
-    } catch (e) {
-      error = e;
-    }
-
-    expect(error).toBeInstanceOf(GasDeployError);
-    expect((error as GasDeployError).message).toContain(path);
-    expect((error as GasDeployError).message).toContain('見つかりません');
-  });
-
-  it('throws a GasDeployError when the path exists but cannot be read (EISDIR)', async () => {
-    const root = await makeTempDir();
-    const path = join(root, 'gasdeploy.yml');
-    await mkdir(path);
-
-    await expect(readConfigFile(path)).rejects.toThrow(GasDeployError);
   });
 });
 
@@ -376,5 +342,59 @@ describe('resolvePrCommentContext', () => {
     const context = await resolvePrCommentContext({ GITHUB_REPOSITORY: 'noslash', GITHUB_EVENT_PATH: eventPath });
 
     expect(context).toBeUndefined();
+  });
+});
+
+describe('resolveProvenanceSource', () => {
+  it('collects the CI context from the environment', async () => {
+    const source = await resolveProvenanceSource({
+      GITHUB_SHA: '6251c8c9f2a1b3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+      GITHUB_RUN_ID: '31344375660',
+      GITHUB_ACTOR: 'yut0takagi',
+    });
+    expect(source).toEqual({
+      sha: '6251c8c9f2a1b3d4e5f6a7b8c9d0e1f2a3b4c5d6',
+      runId: '31344375660',
+      actor: 'yut0takagi',
+    });
+  });
+
+  it('returns an empty source outside of Actions', async () => {
+    expect(await resolveProvenanceSource({})).toEqual({});
+  });
+
+  it('reads the pull request number from the event payload', async () => {
+    const dir = await makeTempDir();
+    const eventPath = join(dir, 'event.json');
+    await writeFile(eventPath, JSON.stringify({ pull_request: { number: 42 } }), 'utf8');
+
+    const source = await resolveProvenanceSource({
+      GITHUB_SHA: '6251c8c',
+      GITHUB_EVENT_PATH: eventPath,
+    });
+    expect(source.pr).toBe(42);
+  });
+
+  // push で走らせた場合。ペイロードは読めるが PR が無いのが通常の状態で、
+  // 実運用では最も頻度の高い経路である。
+  it('collects no pull request number for an event payload without one', async () => {
+    const dir = await makeTempDir();
+    const eventPath = join(dir, 'event.json');
+    await writeFile(eventPath, JSON.stringify({ ref: 'refs/heads/main' }), 'utf8');
+
+    const source = await resolveProvenanceSource({
+      GITHUB_SHA: '6251c8c',
+      GITHUB_EVENT_PATH: eventPath,
+    });
+    expect(source).toEqual({ sha: '6251c8c' });
+  });
+
+  // ペイロードが読めないのは、由来情報の他の要素を捨てる理由にはならない。
+  it('keeps the rest of the context when the event payload is unreadable', async () => {
+    const source = await resolveProvenanceSource({
+      GITHUB_SHA: '6251c8c',
+      GITHUB_EVENT_PATH: '/nonexistent/event.json',
+    });
+    expect(source).toEqual({ sha: '6251c8c' });
   });
 });

@@ -1,5 +1,8 @@
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { expandVariables, parseConfig, resolveTargets } from './config.js';
+import { expandVariables, parseConfig, readConfigFile, resolveTargets } from './config.js';
 import { GasDeployError } from './errors.js';
 
 const FULL_VALID_YAML = `
@@ -192,6 +195,54 @@ projects:
     }
     expect(error).toBeInstanceOf(GasDeployError);
     expect((error as GasDeployError).message).toContain('projects.web-app.rootDir');
+  });
+});
+
+describe('readConfigFile', () => {
+  it('returns the file contents when it exists', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gas-core-config-'));
+    const path = join(dir, 'gasdeploy.yml');
+    await writeFile(path, 'version: 1\n', 'utf8');
+
+    await expect(readConfigFile(path, { notFoundSteps: [] })).resolves.toBe('version: 1\n');
+  });
+
+  it('surfaces the caller-supplied notFoundSteps when the file is missing (ENOENT)', async () => {
+    // 呼び出し元（deploy / rollback / status）ごとに案内文言が変わるのはここだけ、というのが
+    // 統合の前提。呼び出し元から渡した nextSteps がそのまま反映されることを確認する。
+    const dir = await mkdtemp(join(tmpdir(), 'gas-core-config-'));
+    const path = join(dir, 'missing.yml');
+
+    let error: unknown;
+    try {
+      await readConfigFile(path, { notFoundSteps: ['アクション固有の案内その1', 'アクション固有の案内その2'] });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(GasDeployError);
+    const gasError = error as GasDeployError;
+    expect(gasError.message).toContain(path);
+    expect(gasError.message).toContain('見つかりません');
+    expect(gasError.nextSteps).toEqual(['アクション固有の案内その1', 'アクション固有の案内その2']);
+  });
+
+  it('produces the generic message for a non-ENOENT failure (e.g. a directory), ignoring notFoundSteps', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gas-core-config-'));
+    const path = join(dir, 'gasdeploy.yml');
+    await mkdir(path);
+
+    let error: unknown;
+    try {
+      await readConfigFile(path, { notFoundSteps: ['ここは使われないはず'] });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(GasDeployError);
+    const gasError = error as GasDeployError;
+    expect(gasError.message).toContain('読み取れませんでした');
+    expect(gasError.nextSteps.join('\n')).not.toContain('ここは使われないはず');
   });
 });
 

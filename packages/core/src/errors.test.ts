@@ -11,6 +11,16 @@ describe('GasDeployError', () => {
     const err = new GasDeployError('失敗しました');
     expect(err.format()).toBe('失敗しました');
   });
+
+  it('exposes a machine-readable code without leaking it into the formatted output', () => {
+    const err = new GasDeployError('失敗しました', { code: 'token-invalid' });
+    expect(err.code).toBe('token-invalid');
+    expect(err.format()).toBe('失敗しました');
+  });
+
+  it('leaves the code undefined when it is not given', () => {
+    expect(new GasDeployError('失敗しました').code).toBeUndefined();
+  });
 });
 
 describe('classifyApiError', () => {
@@ -44,5 +54,14 @@ describe('classifyApiError', () => {
   it('preserves the raw response body as the error cause', () => {
     const err = classifyApiError(401, '{"error":"invalid_grant"}');
     expect(err.cause).toBe('{"error":"invalid_grant"}');
+  });
+
+  // メッセージ本文は将来変わりうるため、呼び出し側が分岐に使える機械可読な識別子を持たせる。
+  it('tags each classified status with a machine-readable code', () => {
+    expect(classifyApiError(401, '{}').code).toBe('unauthorized');
+    expect(classifyApiError(403, 'Apps Script API has not been used in project 1 before').code).toBe('api-disabled');
+    expect(classifyApiError(403, 'The caller does not have permission').code).toBe('access-denied');
+    expect(classifyApiError(404, '{}').code).toBe('not-found');
+    expect(classifyApiError(500, 'boom').code).toBe('api-error');
   });
 });

@@ -200,4 +200,40 @@ describe('getAccessToken', () => {
     expect(err).toBeInstanceOf(GasDeployError);
     expect(err!.nextSteps.join('\n')).toContain('再認証');
   });
+
+  // 死活監視は「失効したのか、スコープが足りないのか、そもそも繋がらないのか」で
+  // 報告を変える。同じ 400 が失効とスコープ不足の両方で返るため、ステータスでは区別できない。
+  describe('failure codes', () => {
+    async function capture(fetchImpl: typeof fetch): Promise<GasDeployError> {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl);
+        throw new Error('getAccessToken が失敗しませんでした');
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    }
+
+    it('tags an expired or revoked refresh token as token-invalid', async () => {
+      const err = await capture(stubFetch(400, JSON.stringify({ error: 'invalid_grant' })) as unknown as typeof fetch);
+      expect(err.code).toBe('token-invalid');
+    });
+
+    it('tags a scope mismatch as insufficient-scope', async () => {
+      const err = await capture(stubFetch(400, JSON.stringify({ error: 'invalid_scope' })) as unknown as typeof fetch);
+      expect(err.code).toBe('insufficient-scope');
+    });
+
+    it('tags a network-level failure as connectivity', async () => {
+      const fetchImpl = vi.fn(async () => {
+        throw new TypeError('fetch failed');
+      });
+      const err = await capture(fetchImpl as unknown as typeof fetch);
+      expect(err.code).toBe('connectivity');
+    });
+
+    it('tags a 200 response without an access_token as response-invalid', async () => {
+      const err = await capture(stubFetch(200, JSON.stringify({ token_type: 'Bearer' })) as unknown as typeof fetch);
+      expect(err.code).toBe('response-invalid');
+    });
+  });
 });

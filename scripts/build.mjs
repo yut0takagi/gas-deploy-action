@@ -6,6 +6,8 @@ import * as esbuild from 'esbuild';
 const ACTIONS = [
   { entry: 'deploy/src/index.ts', outfile: 'deploy/dist/index.cjs' },
   { entry: 'rollback/src/index.ts', outfile: 'rollback/dist/index.cjs' },
+  { entry: 'token-check/src/index.ts', outfile: 'token-check/dist/index.cjs' },
+  { entry: 'status/src/index.ts', outfile: 'status/dist/index.cjs' },
 ];
 
 for (const { entry, outfile } of ACTIONS) {

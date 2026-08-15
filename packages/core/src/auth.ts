@@ -70,6 +70,7 @@ export async function getAccessToken(
     // ネットワーク層の失敗。送信した credentials は含まれないため cause を保持してよい。
     throw new GasDeployError('トークンエンドポイントに接続できませんでした', {
       cause,
+      code: 'connectivity',
       nextSteps: CONNECTIVITY_NEXT_STEPS,
     });
   }
@@ -81,6 +82,7 @@ export async function getAccessToken(
     // 応答本文の読み取り中に接続が切れた場合。本文は取得できていないため cause を保持してよい。
     throw new GasDeployError('トークンエンドポイントの応答を読み取れませんでした', {
       cause,
+      code: 'connectivity',
       nextSteps: CONNECTIVITY_NEXT_STEPS,
     });
   }
@@ -106,6 +108,7 @@ export async function getAccessToken(
         : `アクセストークンの取得に失敗しました (${response.status})`,
       {
         cause: text,
+        code: isScopeProblem ? 'insufficient-scope' : 'token-invalid',
         nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS,
       },
     );
@@ -118,6 +121,7 @@ export async function getAccessToken(
     // SyntaxError のメッセージは解析対象の断片を含む。成功時の応答には有効な access token が
     // 入るため、cause には載せない。
     throw new GasDeployError('トークンエンドポイントの応答を解析できませんでした', {
+      code: 'response-invalid',
       nextSteps: PARSE_FAILURE_NEXT_STEPS,
     });
   }
@@ -130,6 +134,7 @@ export async function getAccessToken(
   if (typeof accessToken !== 'string' || accessToken.length === 0) {
     // 200 応答でも id_token など他のトークン素材を含みうるため、cause には載せない。
     throw new GasDeployError('トークンエンドポイントの応答に access_token が含まれていません', {
+      code: 'response-invalid',
       nextSteps: EXPIRY_NEXT_STEPS,
     });
   }
