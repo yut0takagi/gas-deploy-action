@@ -1,9 +1,6 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { GasDeployError } from '@gas-deploy/core';
 import { describe, expect, it } from 'vitest';
-import { parseVersionNumberInput, readConfigFile, resolveConfigTarget } from './main.js';
+import { parseVersionNumberInput, resolveConfigTarget } from './main.js';
 
 const CONFIG = `
 version: 1
@@ -43,28 +40,6 @@ describe('parseVersionNumberInput', () => {
 
   it('安全な整数の範囲を超える値を拒否する', () => {
     expect(() => parseVersionNumberInput('9007199254740993')).toThrow(GasDeployError);
-  });
-});
-
-describe('readConfigFile', () => {
-  it('存在しない場合、script-id を使う経路も案内して失敗する', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'gas-rollback-'));
-
-    try {
-      await readConfigFile(join(dir, 'missing.yml'));
-      throw new Error('expected readConfigFile to reject');
-    } catch (error) {
-      expect(error).toBeInstanceOf(GasDeployError);
-      expect((error as GasDeployError).format()).toContain('script-id');
-    }
-  });
-
-  it('存在すれば内容を返す', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'gas-rollback-'));
-    const path = join(dir, 'gasdeploy.yml');
-    await writeFile(path, CONFIG, 'utf8');
-
-    expect(await readConfigFile(path)).toBe(CONFIG);
   });
 });
 

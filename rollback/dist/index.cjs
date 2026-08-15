@@ -27143,12 +27143,17 @@ var GasDeployError = class extends Error {
   nextSteps;
   /** API 由来のエラーの場合のみ設定される。`format()` には現れない。 */
   status;
+  /** 失敗の種別。分類済みのエラーにのみ設定される。`format()` には現れない。 */
+  code;
   constructor(message, details = {}) {
     super(message, { cause: details.cause });
     this.name = "GasDeployError";
     this.nextSteps = details.nextSteps ?? [];
     if (details.status !== void 0) {
       this.status = details.status;
+    }
+    if (details.code !== void 0) {
+      this.code = details.code;
     }
   }
   format() {
@@ -27165,6 +27170,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script API \u306E\u8A8D\u8A3C\u306B\u5931\u6557\u3057\u307E\u3057\u305F (401)", {
       cause: body,
       status,
+      code: "unauthorized",
       nextSteps: [
         "refresh token \u304C\u5931\u52B9\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002OAuth \u540C\u610F\u753B\u9762\u304C\u300C\u30C6\u30B9\u30C8\u300D\u72B6\u614B\u306E\u5834\u5408\u3001refresh token \u306F7\u65E5\u3067\u5931\u52B9\u3057\u307E\u3059\u3002\u300C\u672C\u756A\u300D\u307E\u305F\u306F\u300C\u5185\u90E8\u300D\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044",
         "\u30C7\u30D7\u30ED\u30A4\u306B\u4F7F\u3046 Google \u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -27178,6 +27184,7 @@ function classifyApiError(status, body) {
       return new GasDeployError("Apps Script API \u304C\u6709\u52B9\u5316\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (403)", {
         cause: body,
         status,
+        code: "api-disabled",
         nextSteps: [
           "https://script.google.com/home/usersettings \u3092\u958B\u304D\u300CGoogle Apps Script API\u300D\u3092\u30AA\u30F3\u306B\u3057\u3066\u304F\u3060\u3055\u3044",
           "GCP \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u5074\u3067\u3082 Apps Script API \u3092\u6709\u52B9\u5316\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -27188,6 +27195,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3078\u306E\u30A2\u30AF\u30BB\u30B9\u304C\u62D2\u5426\u3055\u308C\u307E\u3057\u305F (403)", {
       cause: body,
       status,
+      code: "access-denied",
       nextSteps: [
         "\u8A8D\u8A3C\u306B\u4F7F\u3063\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u3001\u5BFE\u8C61\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u7DE8\u96C6\u6A29\u9650\u304C\u3042\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
         "\u8981\u6C42\u30B9\u30B3\u30FC\u30D7\u306B script.projects \u3068 script.deployments \u304C\u542B\u307E\u308C\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
@@ -27198,6 +27206,7 @@ function classifyApiError(status, body) {
     return new GasDeployError("Apps Script \u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093 (404)", {
       cause: body,
       status,
+      code: "not-found",
       nextSteps: [
         "scriptId \u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u30B9\u30AF\u30EA\u30D7\u30C8\u30A8\u30C7\u30A3\u30BF\u306E\u300C\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8A2D\u5B9A\u300D\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\uFF09",
         "\u8A8D\u8A3C\u306B\u4F7F\u3063\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u3001\u5BFE\u8C61\u30B9\u30AF\u30EA\u30D7\u30C8\u306E\u95B2\u89A7\u6A29\u9650\u304C\u3042\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
@@ -27207,6 +27216,7 @@ function classifyApiError(status, body) {
   return new GasDeployError(`Apps Script API \u304C\u30A8\u30E9\u30FC\u3092\u8FD4\u3057\u307E\u3057\u305F (${status})`, {
     cause: body,
     status,
+    code: "api-error",
     nextSteps: ["\u3057\u3070\u3089\u304F\u5F85\u3063\u3066\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044", "Google Workspace \u306E\u30B9\u30C6\u30FC\u30BF\u30B9\u30C0\u30C3\u30B7\u30E5\u30DC\u30FC\u30C9\u3067\u969C\u5BB3\u60C5\u5831\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"]
   });
 }
@@ -27340,6 +27350,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   } catch (cause) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
       cause,
+      code: "connectivity",
       nextSteps: CONNECTIVITY_NEXT_STEPS
     });
   }
@@ -27349,6 +27360,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   } catch (cause) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", {
       cause,
+      code: "connectivity",
       nextSteps: CONNECTIVITY_NEXT_STEPS
     });
   }
@@ -27366,6 +27378,7 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
       isScopeProblem ? `\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})` : `\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`,
       {
         cause: text,
+        code: isScopeProblem ? "insufficient-scope" : "token-invalid",
         nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS
       }
     );
@@ -27375,12 +27388,14 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
     parsed = JSON.parse(text);
   } catch {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
+      code: "response-invalid",
       nextSteps: PARSE_FAILURE_NEXT_STEPS
     });
   }
   const accessToken = typeof parsed === "object" && parsed !== null ? parsed.access_token : void 0;
   if (typeof accessToken !== "string" || accessToken.length === 0) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306E\u5FDC\u7B54\u306B access_token \u304C\u542B\u307E\u308C\u3066\u3044\u307E\u305B\u3093", {
+      code: "response-invalid",
       nextSteps: EXPIRY_NEXT_STEPS
     });
   }
@@ -27622,6 +27637,7 @@ var AppsScriptClient = class {
 };
 
 // packages/core/src/config.ts
+var import_promises = require("node:fs/promises");
 var import_yaml = __toESM(require_dist(), 1);
 var VALID_PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
 function fail(path, message, nextSteps) {
@@ -27640,6 +27656,25 @@ function parseStringArray(value, path) {
     }
     return item;
   });
+}
+async function readConfigFile(path, options) {
+  try {
+    return await (0, import_promises.readFile)(path, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093: ${path}`, {
+        cause: error,
+        nextSteps: [...options.notFoundSteps]
+      });
+    }
+    throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F: ${path}`, {
+      cause: error,
+      nextSteps: [
+        "\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30D1\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+        "config \u30D1\u30B9\u304C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306B\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
 }
 function parseConfig(yamlText) {
   let raw;
@@ -28048,7 +28083,6 @@ async function rollback(client, options) {
 }
 
 // rollback/src/main.ts
-var import_promises = require("node:fs/promises");
 var core = __toESM(require_core(), 1);
 
 // rollback/src/summary.ts
@@ -28118,29 +28152,6 @@ function parseVersionNumberInput(raw) {
   }
   return value;
 }
-async function readConfigFile(path) {
-  try {
-    return await (0, import_promises.readFile)(path, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093: ${path}`, {
-        cause: error,
-        nextSteps: [
-          "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
-          `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${path} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-          "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-        ]
-      });
-    }
-    throw new GasDeployError(`\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F: ${path}`, {
-      cause: error,
-      nextSteps: [
-        "\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u306E\u30D1\u30FC\u30DF\u30C3\u30B7\u30E7\u30F3\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-        "config \u30D1\u30B9\u304C\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u306B\u306A\u3063\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
-}
 function resolveConfigTarget(yamlText, environment, project, env) {
   if (project === "all") {
     throw new GasDeployError('project \u306B "all" \u306F\u6307\u5B9A\u3067\u304D\u307E\u305B\u3093\u3002\u30ED\u30FC\u30EB\u30D0\u30C3\u30AF\u306F\u4E00\u5EA6\u306B1\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u307F\u3092\u5BFE\u8C61\u3068\u3057\u307E\u3059', {
@@ -28191,7 +28202,14 @@ async function run() {
       });
     }
     const configPath = core.getInput("config") || "gasdeploy.yml";
-    target = resolveConfigTarget(await readConfigFile(configPath), environment, project, process.env);
+    const yamlText = await readConfigFile(configPath, {
+      notFoundSteps: [
+        "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+        `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+        "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+    target = resolveConfigTarget(yamlText, environment, project, process.env);
   }
   const deploymentId = deploymentIdInput || target.deploymentId;
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
