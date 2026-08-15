@@ -111,7 +111,7 @@ clasp のトークンは `cloud-platform` を含む広いスコープを要求�
 >
 > したがって **Secrets が漏洩した場合、攻撃者は同じリフレッシュトークンで `cloud-platform` を含む全スコープのアクセストークンを取得できる。** 「本 Action は2スコープしか使わない」ことと「漏洩時の被害が2スコープ分に収まる」ことは別である。
 >
-> 真の最小権限を得るには、最初から2スコープだけを認可した専用の OAuth クライアントでトークンを発行する必要がある。それを行う `setup-cli` は v1.0 で提供予定。それまでは、Secrets の管理と、不要になったトークンの失効（[Google アカウントのセキュリティ設定](https://myaccount.google.com/permissions)）で担保すること。
+> 真の最小権限を得るには、最初から2スコープだけを認可した専用の OAuth クライアントでトークンを発行する必要がある。それを行うのが前述の [`setup-cli`](#a-setup-cli-で専用トークンを発行する推奨)（`npm run setup`）である。この経路 B を使い続ける場合は、Secrets の管理と、不要になったトークンの失効（[Google アカウントのセキュリティ設定](https://myaccount.google.com/permissions)）で担保すること。
 
 - `https://www.googleapis.com/auth/script.projects`
 - `https://www.googleapis.com/auth/script.deployments`
@@ -187,28 +187,34 @@ projects:
 | 入力 | 必須 | 既定値 | 説明 |
 |---|---|---|---|
 | `credentials` | ○ | — | clasp の `.clasprc.json`、または `{client_id, client_secret, refresh_token}` の JSON |
-| `script-id` | ○ | — | デプロイ先の scriptId |
-| `root-dir` | — | `.` | アップロードするファイルのルートディレクトリ |
+| `script-id` | △ | — | デプロイ先の scriptId。指定すると単一プロジェクトモードになり `config` は無視される |
+| `root-dir` | — | `.` | アップロードするファイルのルートディレクトリ（単一プロジェクトモードのみ） |
 | `deployment-id` | — | — | 更新する既存デプロイの ID。省略すると新規デプロイが作成され Web アプリの URL が変わる |
 | `project-type` | — | `standalone` | `webapp` \| `addon` \| `bound` \| `standalone` |
 | `ignore` | — | — | 除外パターン（改行区切り）。省略時は `.claspignore`、それも無ければ既定値を使う |
 | `dry-run` | — | `false` | 差分の表示のみ行い、書き込みを行わない |
 | `create-version` | — | `true` | バージョン作成とデプロイを行うかどうか |
 | `description` | — | `ci-<sha7>-<run_number>` | バージョンの説明 |
+| `config` | — | `gasdeploy.yml` | 複数プロジェクトモードで読む設定ファイル（`script-id` 未指定のときのみ使用） |
+| `environment` | △ | — | デプロイする environment 名。複数プロジェクトモードでは必須 |
+| `projects` | — | `all` | デプロイするプロジェクト名（カンマ区切り）。`all` で全プロジェクト |
 | `comment-on-pr` | — | `false` | サマリを PR にコメントする |
 | `github-token` | — | `${{ github.token }}` | PR コメントに使うトークン |
 | `comment-key` | — | environment または `default` | コメントを識別するキー |
+
+`○` は常に必須、`△` はモードによって必須。`script-id` と `environment` は**どちらかが必要**で、`script-id` があれば単一プロジェクトモード、無ければ `config` を読む複数プロジェクトモードになる（[前述](#単一プロジェクトモードとの関係)）。
 
 ## 出力
 
 | 出力 | 説明 |
 |---|---|
 | `changed` | 差分があったかどうか（`true` / `false`） |
-| `version-number` | 作成されたバージョン番号 |
-| `previous-version-number` | 更新前にデプロイが指していたバージョン番号（`deployment-id` 指定時のみ）。ロールバック先として使える |
-| `deployment-id` | 更新または作成されたデプロイ ID |
-| `web-app-url` | Web アプリの URL（該当する場合） |
+| `version-number` | 作成されたバージョン番号（単一プロジェクトモードのみ） |
+| `previous-version-number` | 更新前にデプロイが指していたバージョン番号（単一プロジェクトモードで `deployment-id` 指定時のみ）。ロールバック先として使える |
+| `deployment-id` | 更新または作成されたデプロイ ID（単一プロジェクトモードのみ） |
+| `web-app-url` | Web アプリの URL（該当する場合、単一プロジェクトモードのみ） |
 | `summary` | 人間可読のサマリ（Markdown） |
+| `deployments` | 複数プロジェクトモードでの各プロジェクトの結果（JSON 配列）。対象は失敗・未実行のものも含めて必ず1件ずつ入る。各要素は `project` / `environment` / `scriptId` / `status`（`deployed` \| `unchanged` \| `failed` \| `skipped`）を必ず持ち、該当する場合のみ `versionNumber` / `previousVersionNumber` / `deploymentId` / `webAppUrl` / `error` を含む |
 
 ## PR に差分をコメントする
 
@@ -361,6 +367,129 @@ push で走るワークフローに `comment-on-pr: true` が付いたままで�
 
 `version-number` に現在より**新しい**バージョンを指定することもできる（ロールバックの取り消しなど）。その場合はロールフォワードである旨を警告したうえで実行する。すでに戻り先バージョンを指している場合は何も書き換えず、`rolled-back` を `false` にしてその旨を返す。「効いたのか、元から同じだったのか」を区別できない成功を返さないため。
 
+## 本番で動いているコミットを知る
+
+GAS には「このスクリプトはどのコミットから作られたか」を記録する場所がない。本 Action はバージョン説明にコミット情報を埋め込み、`status` アクションでそれを引けるようにする。
+
+> ⚠️ このアクションは**まだリリースされていない**。`v0.1.1` および `v0` タグには含まれていないため、下記の例は次のリリース以降で動作する。それまでは `@main` を指定すること。
+
+```yaml
+- id: status
+  uses: yut0takagi/gas-deploy-action/status@v0
+  with:
+    credentials: ${{ secrets.CLASPRC_JSON }}
+    script-id: ${{ secrets.GAS_SCRIPT_ID }}
+    deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}
+
+- run: echo "本番は ${{ steps.status.outputs.sha }} (PR #${{ steps.status.outputs.pr }})"
+```
+
+`gasdeploy.yml` を使っている場合は `environment` を指定すると、`projects: all` で全プロジェクトの現況を一覧できる。ロールバックと違い読み取りしか行わないため `all` を許している。**全対象を試行してから結果を返す**ので、一部が失敗しても他の結果は失われない（1件以上失敗した場合はジョブを失敗させる）。
+
+### バージョン説明の形式
+
+```text
+ci sha=6251c8c9f2a1b3d4e5f6a7b8c9d0e1f2a3b4c5d6 run=31344375660 pr=42 by=yut0takagi
+```
+
+`description` 入力を指定した場合は、この後ろに ` | <指定値>` として保持される。**指定値で置き換えない。** 由来を無条件に残すことがこの機能の目的である。
+
+**この形式に完全一致しないバージョンは「CI 管理外」として報告される。** 手動で作成したバージョンや、v0.1.1 以前の `ci-<sha7>-<run_number>` 形式のバージョンが該当する。部分一致から情報を拾うと、人が手で作ったバージョンを CI 製と取り違えるため、意図的に厳格にしている。
+
+### 入力（`status/action.yml`）
+
+| 入力 | 必須 | 既定値 | 説明 |
+|---|---|---|---|
+| `credentials` | ○ | — | デプロイ用アクションと同じ |
+| `script-id` | △ | — | 指定すると `config` を読み込まない |
+| `deployment-id` | — | — | 省略時、バージョン付きデプロイが1つのときだけ自動特定。**複数対象に解決される場合は指定できない**（デプロイ ID は単一スクリプトに紐づくため） |
+| `config` | — | `gasdeploy.yml` | `script-id` 未指定時に読む設定ファイル |
+| `environment` | △ | — | config モードでは必須 |
+| `projects` | — | `all` | 対象プロジェクト名（カンマ区切り） |
+
+### 出力（`status/action.yml`）
+
+| 出力 | 説明 |
+|---|---|
+| `managed` | 由来情報を復元できたか。`false` は CI 管理外または `@HEAD` |
+| `version-number` | デプロイが指すバージョン番号 |
+| `sha` / `run-id` / `pr` / `actor` | 復元できた由来情報 |
+| `created-at` | バージョンの作成日時 |
+| `deployment-id` / `web-app-url` | 対象のデプロイ |
+| `summary` | 人間可読のサマリ（Markdown） |
+| `targets` | config モードでの全対象の結果（JSON 配列） |
+
+`managed` 〜 `web-app-url` は単一対象モード（`script-id` 指定時）のみ設定される。config モードでは `targets` に全対象の結果が入る。
+
+## 認証情報の失効を監視する
+
+refresh token の失効は、**次にデプロイが必要になった瞬間に初めて気づく**形で現れる。障害対応でロールバックしようとしたら認証が通らない、が最悪の形である。`token-check` は週次で失効を先に検知するためのアクションで、**何も書き換えない**（refresh token は失効しない限り不変なので、更新する対象がそもそも無い）。
+
+> ⚠️ このアクションは**まだリリースされていない**。`v0.1.1` および `v0` タグには含まれていないため、下記の例は次のリリース以降で動作する。それまでは `@main` を指定するか、リリースを待つこと。
+
+```yaml
+name: Check GAS credentials
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'     # 毎週月曜
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write             # 失効時に Issue を起票する場合のみ
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: check
+        uses: yut0takagi/gas-deploy-action/token-check@v0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          script-id: ${{ secrets.GAS_SCRIPT_ID }}
+
+      - name: 失効していたら Issue を起票する
+        if: failure() && steps.check.outputs.status == 'invalid'
+        run: gh issue create --title "GAS の認証情報が失効しました" --body "${{ steps.check.outputs.summary }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+```
+
+`script-id` を指定すると、トークンの交換に加えて**実際にそのプロジェクトを読み取れるか**まで確認する。「トークンは生きているが Apps Script API を無効化された」「対象スクリプトの権限を外された」は交換だけでは検知できない。
+
+### 判定は3状態ある
+
+| `status` | 意味 | 既定の挙動 |
+|---|---|---|
+| `valid` | 使える | 何もしない |
+| `invalid` | 使えない。**この状態のままではデプロイが失敗する** | ジョブを失敗させる |
+| `unknown` | 有効かどうか**判定できなかった**。失効したとは限らない | 警告のみ |
+
+**`unknown` で既定ではジョブを落とさない。** ランナーが Google に到達できなかっただけで週次ジョブが赤くなると、本当に失効したときの赤が「またいつもの失敗」として埋もれる。監視の価値は赤が希少であることに依っている。到達性の問題まで検知したい場合は `fail-on-unknown: true` を指定する。
+
+分岐にはメッセージ本文ではなく `reason` を使うこと。`ok` / `token-invalid` / `insufficient-scope` / `unauthorized` / `api-disabled` / `access-denied` / `not-found` / `connectivity` / `response-invalid` / `api-error` / `unclassified` のいずれかを返す。
+
+### 入力（`token-check/action.yml`）
+
+| 入力 | 必須 | 既定値 | 説明 |
+|---|---|---|---|
+| `credentials` | ○ | — | デプロイ用アクションと同じ |
+| `script-id` | — | — | 指定するとプロジェクトの読み取りまで確認する |
+| `fail-on-invalid` | — | `true` | 使えないと判定されたときにジョブを失敗させる |
+| `fail-on-unknown` | — | `false` | 判定できなかったときにジョブを失敗させる |
+
+### 出力（`token-check/action.yml`）
+
+| 出力 | 説明 |
+|---|---|
+| `status` | `valid` / `invalid` / `unknown` |
+| `reason` | 判定の理由（上記の識別子） |
+| `project-checked` | `script-id` を指定してプロジェクトの読み取りまで確認できたか |
+| `summary` | 人間可読のサマリ（Markdown） |
+
+`gasdeploy.yml` の設定モードには対応しない。死活監視が確認するのは認証情報そのものであって、デプロイ対象の一覧ではないため。プロジェクトごとに読み取りまで確認したい場合は、`script-id` を変えてこのアクションを複数回実行する。
+
 ## ⚠️ `.claspignore` は gitignore ではない
 
 `.claspignore` は **glob マッチであり、gitignore のディレクトリ・ルート指定の意味論を持たない**。gitignore の感覚で書いたパターンは、エラーにも警告にもならず、**静かに何も除外しない**。
@@ -404,3 +533,5 @@ Apps Script は **バージョン付きデプロイを最大20個まで**しか�
 ## 実地確認の裏付け
 
 上記の挙動（`.claspignore` の解釈、デプロイ上限、ファイル名の拡張子処理、シンボリックリンクの扱いなど）は、実際の Apps Script API と clasp に対して行った検証に基づく。詳細は [`docs/superpowers/notes/2026-08-09-api-verification.md`](docs/superpowers/notes/2026-08-09-api-verification.md) を参照。
+
+継続的な検証として、`push → 内容の確認 → デプロイ → ロールバック → 復元` を実 GAS に通す E2E を週次ワークフロー（[`.github/workflows/e2e.yml`](.github/workflows/e2e.yml)）に置いている。`pull_request` では意図的に起動しない（Secrets を要するため、フォークからの PR がすべて失敗するのを防ぐ）。**`GAS_E2E_CREDENTIALS` / `GAS_E2E_SCRIPT_ID` / `GAS_E2E_DEPLOYMENT_ID` が未設定の場合は実行されず、その旨がジョブサマリに残る。** このジョブが緑であることは、それ自体では E2E が通ったことを意味しない。
