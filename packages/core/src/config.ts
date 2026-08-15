@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { GasDeployError } from './errors.js';
 import type { ProjectType } from './types.js';
@@ -58,6 +59,39 @@ function parseStringArray(value: unknown, path: string): string[] {
     }
     return item;
   });
+}
+
+export interface ReadConfigFileOptions {
+  /** ファイルが存在しない場合に案内する手順。アクションごとに異なるのはここだけ。 */
+  notFoundSteps: readonly string[];
+}
+
+/**
+ * 設定ファイルを読み込む。
+ *
+ * 以前は deploy / rollback / status がそれぞれ同じ関数を持ち、「案内する手順が違うから
+ * 共通化しない」と説明していた。実際には rollback と status は完全に同一で、説明が
+ * 事実に反していた。異なるのは「ファイルが無い」ときの案内だけなので、そこだけを
+ * 引数で受け取る。
+ */
+export async function readConfigFile(path: string, options: ReadConfigFileOptions): Promise<string> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new GasDeployError(`設定ファイルが見つかりません: ${path}`, {
+        cause: error,
+        nextSteps: [...options.notFoundSteps],
+      });
+    }
+    throw new GasDeployError(`設定ファイルを読み取れませんでした: ${path}`, {
+      cause: error,
+      nextSteps: [
+        '設定ファイルのパーミッションを確認してください',
+        'config パスがディレクトリになっていないか確認してください',
+      ],
+    });
+  }
 }
 
 /**
