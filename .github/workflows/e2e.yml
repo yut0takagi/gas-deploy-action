@@ -1,0 +1,76 @@
+name: E2E
+
+# 実 GAS に対する検証（テスト戦略レベル4）。
+#
+# pull_request では意図的に起動しない。Secrets を要するため、フォークからの PR で
+# 走らせるとすべて失敗し、外部コントリビュータの PR が理由もなく赤くなる。週次と手動のみ。
+on:
+  schedule:
+    # 毎週月曜 03:00 UTC（日本時間の正午）。デプロイが集中しない時間帯に置く。
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+# 同時に走らせない。同一の scriptId を書き換えるため、並走すると互いの HEAD を
+# 上書きし、復元も取り違える。
+concurrency:
+  group: gas-e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    # フォークでスケジュールが有効化された場合に、Secrets の無い環境で走らせない。
+    if: github.repository == 'yut0takagi/gas-deploy-action'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Secrets が未設定なら実行しない。ただし「実行しなかった」ことを必ずサマリに残す。
+      # 黙って緑にすると、E2E が動いていないのに動いているつもりになる。
+      - name: Check whether E2E is configured
+        id: config
+        env:
+          CREDENTIALS: ${{ secrets.GAS_E2E_CREDENTIALS }}
+          SCRIPT_ID: ${{ secrets.GAS_E2E_SCRIPT_ID }}
+          DEPLOYMENT_ID: ${{ secrets.GAS_E2E_DEPLOYMENT_ID }}
+        run: |
+          if [ -n "$CREDENTIALS" ] && [ -n "$SCRIPT_ID" ] && [ -n "$DEPLOYMENT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::E2E は未設定のため実行していません（GAS_E2E_CREDENTIALS / GAS_E2E_SCRIPT_ID / GAS_E2E_DEPLOYMENT_ID）"
+            {
+              echo "## E2E: 未実行"
+              echo ""
+              echo "必要な Secrets が設定されていないため、実 GAS への検証を行っていません。"
+              echo "このジョブが緑であることは、E2E が通ったことを意味しません。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Run E2E against the real Apps Script API
+        if: steps.config.outputs.configured == 'true'
+        env:
+          GAS_E2E_CREDENTIALS: ${{ secrets.GAS_E2E_CREDENTIALS }}
+          GAS_E2E_SCRIPT_ID: ${{ secrets.GAS_E2E_SCRIPT_ID }}
+          GAS_E2E_DEPLOYMENT_ID: ${{ secrets.GAS_E2E_DEPLOYMENT_ID }}
+        run: |
+          set -o pipefail
+          npm run e2e 2>&1 | tee e2e-output.txt
+
+      - name: Publish the E2E result to the job summary
+        if: always() && steps.config.outputs.configured == 'true'
+        run: |
+          {
+            echo "## E2E 実行結果"
+            echo ""
+            echo '```'
+            cat e2e-output.txt 2>/dev/null || echo "出力を取得できませんでした"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
