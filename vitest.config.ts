@@ -8,6 +8,8 @@ export default defineConfig({
       'packages/*/src/**/*.test.ts',
       'deploy/src/**/*.test.ts',
       'rollback/src/**/*.test.ts',
+      'token-check/src/**/*.test.ts',
+      'status/src/**/*.test.ts',
       'tests/**/*.test.ts',
     ],
     environment: 'node',

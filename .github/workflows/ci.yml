@@ -32,9 +32,9 @@ jobs:
       # コミットされていない状態を検出できないため、必ず git status --porcelain を使う。
       - name: Verify dist is in sync
         run: |
-          if [ -n "$(git status --porcelain -- deploy/dist rollback/dist)" ]; then
+          if [ -n "$(git status --porcelain -- deploy/dist rollback/dist token-check/dist status/dist)" ]; then
             echo "::error::dist がソースと同期していません。'npm run build' を実行してコミットしてください"
-            git status --porcelain -- deploy/dist rollback/dist
+            git status --porcelain -- deploy/dist rollback/dist token-check/dist status/dist
             exit 1
           fi
 
@@ -44,7 +44,7 @@ jobs:
       # 実行して初めて露見する。実際にこの経路で本番が壊れた。
       - name: Smoke-test the bundles
         run: |
-          for BUNDLE in deploy/dist/index.cjs rollback/dist/index.cjs; do
+          for BUNDLE in deploy/dist/index.cjs rollback/dist/index.cjs token-check/dist/index.cjs status/dist/index.cjs; do
             echo "--- $BUNDLE ---"
             set +e
             OUTPUT=$(node "$BUNDLE" 2>&1)
