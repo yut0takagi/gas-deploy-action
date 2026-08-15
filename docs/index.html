@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gas-deploy-action ドキュメント</title>
+<style>
+:root{
+  --ink:#1a1a1a;
+  --ink-2:#555555;
+  --ink-3:#8e8e8e;
+  --accent:#173f66;
+  --accent-tint:#eef3f8;
+  --hairline:#d9d9d9;
+  --fill-gray:#e7e9ec;
+  --paper:#ffffff;
+}
+html{color-scheme:light}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Helvetica Neue",Arial,"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic Medium","Yu Gothic",Meiryo,sans-serif;
+  font-size:15px;line-height:1.9;
+  border-top:6px solid var(--accent);
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:760px;margin:0 auto;padding:56px clamp(24px,6vw,48px) 96px}
+
+/* 表紙ブロック */
+.doc-header{padding-bottom:28px;border-bottom:1px solid var(--ink)}
+.eyebrow{font-size:11px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;margin:0 0 20px}
+h1{font-size:27px;line-height:1.5;letter-spacing:.02em;margin:0 0 12px;font-feature-settings:"palt" 1}
+.lead{font-size:14px;color:var(--ink-2);margin:0 0 24px;max-width:38em}
+.doc-meta{font-size:12px;color:var(--ink-3);display:flex;gap:24px;flex-wrap:wrap}
+
+/* セクション */
+.page>section{border-top:1px solid var(--hairline);padding-top:44px;margin-top:64px}
+.page>section:first-of-type{border-top:0;padding-top:0;margin-top:56px}
+h2{font-size:19px;letter-spacing:.03em;margin:0;font-feature-settings:"palt" 1}
+h2 .no{color:var(--accent);margin-right:14px;font-variant-numeric:tabular-nums}
+.msg{font-size:16px;font-weight:600;line-height:1.8;margin:18px 0 24px;max-width:36em}
+h3{font-size:15px;margin:36px 0 8px}
+p{margin:0 0 16px;max-width:42em}
+
+/* リスト */
+ul,ol{margin:0 0 16px;padding-left:1.4em;max-width:41em}
+li{margin-bottom:6px}
+ul{list-style:none;padding-left:1.2em}
+ul li::before{content:"–";float:left;margin-left:-1.2em;color:var(--ink-3)}
+
+/* サマリー */
+.summary{list-style:none;margin:24px 0 0;padding:0;counter-reset:s;max-width:44em}
+.summary li{counter-increment:s;position:relative;padding-left:2.4em;margin-bottom:14px}
+.summary li::before{
+  content:counter(s,decimal-leading-zero);position:absolute;left:0;top:.4em;
+  font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.04em;
+  font-variant-numeric:tabular-nums;
+}
+
+/* KPI */
+.kpis{display:flex;flex-wrap:wrap;row-gap:24px;margin:32px 0 8px}
+.kpi{padding:2px 32px}
+.kpi:first-child{padding-left:0}
+.kpi+.kpi{border-left:1px solid var(--hairline)}
+.kpi .v{font-size:30px;font-weight:700;color:var(--accent);line-height:1.3;
+  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.kpi .v small{font-size:14px;font-weight:600;margin-left:2px}
+.kpi .l{font-size:11.5px;color:var(--ink-3);letter-spacing:.06em;margin-top:6px}
+
+/* 表 */
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin:28px 0 8px;font-size:13px;line-height:1.6}
+caption{text-align:left;font-size:12.5px;font-weight:600;margin-bottom:10px}
+th{font-size:12px;font-weight:600;text-align:left;padding:10px 12px;
+  border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);vertical-align:bottom}
+td{padding:10px 12px;border-bottom:1px solid var(--hairline);vertical-align:top}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.total td{border-top:1px solid var(--ink);border-bottom:2px solid var(--ink);
+  font-weight:600;background:var(--accent-tint)}
+
+/* 図表・出所・注記 */
+figure{margin:32px 0 8px}
+figcaption{font-size:12.5px;font-weight:600;margin-bottom:14px}
+figure svg{width:100%;height:auto;display:block}
+svg text{font-family:inherit}
+.fig-scroll{overflow-x:auto}
+.src{font-size:11.5px;color:var(--ink-3);margin:6px 0 0}
+.note{font-size:12.5px;color:var(--ink-2);border-left:2px solid var(--hairline);
+  padding:2px 0 2px 14px;margin:24px 0 16px;max-width:40em}
+
+/* 矢羽根 */
+.chevrons{display:flex;margin:28px 0 8px;min-width:520px}
+.chev{flex:1;padding:9px 10px 9px 22px;font-size:12px;font-weight:600;line-height:1.5;
+  text-align:center;background:var(--fill-gray);margin-left:4px;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%,12px 50%)}
+.chev:first-child{margin-left:0;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 50%,calc(100% - 12px) 100%,0 100%)}
+.chev.on{background:var(--accent);color:#fff}
+.chev small{display:block;font-size:10.5px;font-weight:500;opacity:.75}
+
+/* ロードマップ */
+.roadmap{min-width:560px;margin:28px 0 8px}
+.rm-row{display:grid;grid-template-columns:120px repeat(6,1fr);align-items:center}
+.rm-row.rm-head{border-bottom:1px solid var(--ink)}
+.rm-h{font-size:11px;font-weight:600;color:var(--ink-3);text-align:center;
+  padding:0 0 8px;letter-spacing:.04em}
+.rm-row:not(.rm-head){border-bottom:1px solid var(--hairline);padding:12px 0}
+.rm-lane{font-size:12px;font-weight:600;padding-right:12px;line-height:1.5}
+.rm-bar{font-size:11px;font-weight:600;line-height:1.4;padding:4px 10px;
+  background:var(--fill-gray);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rm-bar.on{background:var(--accent);color:#fff}
+.rm-ms{font-size:11.5px;font-weight:700;color:var(--accent);white-space:nowrap}
+
+/* フレームワーク表 */
+.matrix{display:grid;grid-template-columns:var(--mx-label,140px) repeat(var(--mx-cols,2),1fr);
+  gap:18px 20px;margin:28px 0 8px;min-width:560px}
+.mx-h{font-size:11.5px;font-weight:600;color:var(--ink-2);text-align:center;
+  align-self:end;padding-bottom:8px;border-bottom:1px solid var(--ink)}
+.mx-label{background:var(--accent);color:#fff;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:2px;
+  font-size:12px;font-weight:700;line-height:1.5;padding:12px 10px}
+.mx-label small{font-size:10px;font-weight:600;opacity:.7;letter-spacing:.08em}
+.mx-label.alt{background:var(--fill-gray);color:var(--ink)}
+.mx-cell{font-size:12px;line-height:1.75}
+.mx-cell ul{margin:0}
+.mx-cell li{margin-bottom:5px}
+.mx-h.stage{border-bottom:0;background:var(--fill-gray);color:var(--ink);
+  padding:7px 8px;line-height:1.4;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%,10px 50%)}
+.mx-h.stage.first{clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%)}
+.mx-h.stage.on{background:var(--accent);color:#fff}
+.mx-h.stage small{display:block;font-size:9.5px;font-weight:600;opacity:.7;letter-spacing:.06em}
+
+/* 強調 */
+b,strong{font-weight:700}
+.em{color:var(--accent);font-weight:700}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--accent)}
+
+/* コード（レイアウトのみ。新しい色・枠・影は足さない） */
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;font-size:.9em}
+pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  font-size:12px;line-height:1.8;color:var(--ink-2);margin:22px 0 8px;
+  padding:2px 0 2px 16px;border-left:1px solid var(--hairline);overflow-x:auto}
+pre code{font-size:inherit}
+.toc{list-style:none;margin:24px 0 0;padding:0;max-width:44em;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px 28px}
+.toc li{font-size:13px;margin-bottom:2px}
+.toc li::before{content:none}
+.toc .n{color:var(--accent);font-weight:700;font-size:11.5px;
+  font-variant-numeric:tabular-nums;margin-right:10px}
+.req{color:var(--ink-3);font-size:11.5px}
+
+/* フッター */
+.doc-footer{margin-top:88px;padding-top:20px;border-top:1px solid var(--hairline);
+  font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+@media print{
+  @page{size:A4;margin:16mm}
+  body{border-top-width:4px}
+  .page{max-width:none;padding:0}
+  .page>section{margin-top:48px;padding-top:32px}
+  table,figure,.kpis,.chevrons,.roadmap,.matrix{break-inside:avoid}
+  a{text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <p class="eyebrow">技術ドキュメント ／ gas-deploy-action v0.1.1 + 未リリース分</p>
+    <h1>gas-deploy-action 仕様・運用ドキュメント<br>— Apps Script API を直接呼び出す GitHub Action</h1>
+    <p class="lead">Google Apps Script を CI からデプロイするための Action の全機能・全入出力・事故が起きやすい箇所と、現時点の実装完成度をまとめる。導入判断と運用設計の両方に使えることを目的とする。</p>
+    <div class="doc-meta">
+      <span>2026年8月14日</span>
+      <span>対象 v0.1.1 および main の未リリース分</span>
+      <span>リポジトリ yut0takagi/gas-deploy-action</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>エグゼクティブサマリー</h2>
+    <ol class="summary">
+      <li><b>clasp をラップせず Apps Script API を直接叩く Action である。</b>dry-run・差分表示・既存デプロイ更新による URL 維持・デプロイ上限の警告は、いずれも clasp CLI の外側からは実装できないため、この構造を選んでいる。</li>
+      <li><b>出荷済みで、実用に足る完成度にある。</b>v0.1.1 をリリース済み。テスト348件が全パスし、CI は型検査・テスト・ビルド・dist 同期・バンドル起動の5ゲートを通している。段階リリース計画の15項目のうち13項目が実装済みで、<b>v1.0 スコープの実装はすべて揃った</b>（リリースは未実施）。</li>
+      <li><b>残るリスクは「未検証3件」に集約される。</b>OAuth 同意画面がテスト状態だと refresh token が7日で失効する点が最大の運用リスクで、これは <code>token-check</code> による週次監視で早期検知できるようにした。残る不確実性は、人が Google Cloud Console とブラウザで確かめるしかない2件と、PR コメントの境界条件1件である。</li>
+    </ol>
+
+    <div class="kpis">
+      <div class="kpi"><div class="v">348</div><div class="l">テスト（25ファイル・全パス）</div></div>
+      <div class="kpi"><div class="v">13<small>/15</small></div><div class="l">計画機能の実装済み項目</div></div>
+      <div class="kpi"><div class="v">4</div><div class="l">提供するアクション</div></div>
+      <div class="kpi"><div class="v">3</div><div class="l">既知の未検証事項</div></div>
+    </div>
+    <p class="src">出所: <code>npm test</code> 実行結果（2026-08-14）、<code>.github/workflows/ci.yml</code>、設計仕様 §9 の段階リリース表を項目化して突合。</p>
+
+    <ul class="toc">
+      <li><span class="n">01</span>設計上の選択とアーキテクチャ</li>
+      <li><span class="n">02</span>認証 — 最も壊れやすい箇所</li>
+      <li><span class="n">03</span>deploy アクションの入出力</li>
+      <li><span class="n">04</span>複数プロジェクト構成</li>
+      <li><span class="n">05</span>PR への差分コメント</li>
+      <li><span class="n">06</span>rollback アクション</li>
+      <li><span class="n">07</span>事故が起きやすい箇所</li>
+      <li><span class="n">08</span>.claspignore の解釈</li>
+      <li><span class="n">09</span>品質保証の現状</li>
+      <li><span class="n">10</span>完成度の評価</li>
+      <li><span class="n">11</span>推奨アクション</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">01</span>設計上の選択とアーキテクチャ</h2>
+    <p class="msg">clasp CLI をラップしないという選択が、この Action の機能すべての前提になっている。代償として「clasp 互換を自前で保証する責任」を負い、それをゴールデンテストで担保する。</p>
+
+    <p><code>clasp push</code> / <code>clasp deploy</code> を CI から呼ぶラッパーではなく、Apps Script API（<code>projects.updateContent</code> / <code>projects.versions.create</code> / <code>projects.deployments</code>）を直接呼び出す。既存の clasp ラッパー系 Action が対話プロンプトやエラー出力、バージョン間の仕様変更に振り回されるのは、CLI を外側から操作する構造そのものに原因がある。</p>
+
+    <p>その代わり <code>.claspignore</code> の解釈やファイル種別の判定といった互換性は自前の責任になる。これは実際の <code>clasp status --json</code> の判定結果と本実装の出力を突き合わせるゴールデンテストで担保している。</p>
+
+    <figure>
+      <figcaption>図表1: デプロイの実行フロー（濃紺は書き込みを伴う工程）</figcaption>
+      <div class="fig-scroll"><div class="chevrons">
+        <div class="chev">認証情報の正規化<small>2スコープに絞って交換</small></div>
+        <div class="chev">ファイル収集<small>.claspignore 互換の除外</small></div>
+        <div class="chev">差分算出<small>dry-run はここで停止</small></div>
+        <div class="chev on">updateContent<small>ローカルで全置換</small></div>
+        <div class="chev on">version → deployment<small>既存 ID を更新し URL 維持</small></div>
+      </div></div>
+      <p class="src">出所: <code>packages/core/src/deployer.ts</code>。<code>create-version: false</code> の場合は第5工程を行わない。</p>
+    </figure>
+
+    <p>GitHub Actions への依存は <code>deploy/</code> と <code>rollback/</code> の薄いアダプタ層に閉じ込め、ロジックは <code>packages/core</code> に置く。HTTP は Node のネイティブ <code>fetch</code> のみを使い、<code>googleapis</code> SDK は使わない（呼ぶエンドポイントは6個だけであり、バンドルサイズと依存を減らす方が利益が大きい）。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表1: <code>packages/core</code> のモジュール構成と責務</caption>
+        <thead><tr><th>モジュール</th><th>責務</th><th>設計上の要点</th></tr></thead>
+        <tbody>
+          <tr><td><code>credentials.ts</code></td><td>3形式の認証情報を正規化</td><td>候補を全収集してから <code>default</code> を選ぶ。複数あり <code>default</code> が無ければエラー</td></tr>
+          <tr><td><code>auth.ts</code></td><td>refresh token → access token</td><td>交換時に scope を指定して2スコープに絞る</td></tr>
+          <tr><td><code>ignore.ts</code></td><td>除外判定</td><td>gitignore ではなく glob。clasp v3.3.0 の判定に一致させる</td></tr>
+          <tr><td><code>file-collector.ts</code></td><td>ディレクトリ走査</td><td>非マニフェスト JSON を除外。サブディレクトリは <code>/</code> 区切りの name</td></tr>
+          <tr><td><code>differ.ts</code></td><td>正規化と差分計算</td><td>差分ゼロならスキップ。半分以上の削除で警告</td></tr>
+          <tr><td><code>api-client.ts</code></td><td>Apps Script API クライアント</td><td>POST は 5xx で自動リトライしない。<code>deployments.list</code> は <code>pageSize</code> 必須</td></tr>
+          <tr><td><code>deployer.ts</code></td><td>単一プロジェクトの手順統括</td><td>更新前に現行バージョンを読み、ロールバック先として出力</td></tr>
+          <tr><td><code>config.ts</code></td><td><code>gasdeploy.yml</code> の解析</td><td><code>${VAR}</code> を環境変数から展開。未定義はエラー</td></tr>
+          <tr><td><code>multi-deployer.ts</code></td><td>複数プロジェクトの逐次実行</td><td>最初の失敗で停止し、全ターゲットの状態を返す</td></tr>
+          <tr><td><code>rollback.ts</code></td><td>バージョン差し替え</td><td>読み取り一貫性への緩和策を内包（06節）</td></tr>
+          <tr><td><code>token-health.ts</code></td><td>認証情報の死活監視</td><td>有効／使えない／判定できないの3状態を返す。何も書き換えない</td></tr>
+          <tr><td><code>provenance.ts</code></td><td>由来情報の整形と復元</td><td>完全一致しない説明は「CI 管理外」とし、部分一致から拾わない</td></tr>
+          <tr><td><code>status.ts</code></td><td>デプロイ中のバージョンと由来の取得</td><td>読み取りのみ。<code>@HEAD</code> は正常な報告対象として扱う</td></tr>
+          <tr><td><code>errors.ts</code></td><td>エラー分類</td><td>スコープ不足と失効を取り違えず、専用の案内を出す。分岐用に機械可読コードを持つ</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>packages/core/src/</code> の各実装。<code>types.ts</code> と <code>index.ts</code>（再エクスポート）は省略。</p>
+    </div>
+
+    <h3>最小の導入例</h3>
+<pre><code>name: Deploy GAS
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: yut0takagi/gas-deploy-action/deploy@v0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          script-id: ${{ secrets.GAS_SCRIPT_ID }}
+          root-dir: dist
+          deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}</code></pre>
+    <p class="note"><code>root-dir</code> にはビルド済み JS を指定する。TypeScript のトランスパイルは本 Action の責務ではない。バージョンは <code>@v0.1.1</code> のように固定するか、<code>@v0</code> でパッチリリースに追従させる。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">02</span>認証 — 最も壊れやすい箇所</h2>
+    <p class="msg">この Action が「1週間後に壊れる」原因のほぼすべては OAuth 同意画面の状態にある。導入時に必ず確認すべき設定は、コードでも入力でもなく Google Cloud Console 側にある。</p>
+
+    <p>Apps Script API は Google 側の仕様としてサービスアカウントのトークンを受け付けない。したがってユーザーアカウントの refresh token を Secret に格納する方式が現状唯一の選択肢である。認証情報の用意には2つの経路があり、<b>権限の広さが違う</b>。</p>
+
+    <figure>
+      <figcaption>図表2: 認証情報を用意する2つの経路</figcaption>
+      <div class="fig-scroll"><div class="matrix" style="--mx-cols:3;--mx-label:132px">
+        <div class="mx-h"></div>
+        <div class="mx-h">手間</div>
+        <div class="mx-h">Secrets に入る権限</div>
+        <div class="mx-h">漏洩したときの影響</div>
+
+        <div class="mx-label"><small>経路 A（推奨）</small>setup-cli で専用トークンを発行</div>
+        <div class="mx-cell">GCP コンソール操作が必要。<code>npm run setup</code> が対話で案内する</div>
+        <div class="mx-cell"><b>2スコープのみ</b>（<code>script.projects</code> / <code>script.deployments</code>）。要求どおりか検証し、余分が混ざれば保存せず中断する</div>
+        <div class="mx-cell">被害は2スコープ分に収まる</div>
+
+        <div class="mx-label alt"><small>経路 B</small>clasp の認証情報を借りる</div>
+        <div class="mx-cell"><code>clasp login</code> だけ。既存 clasp ユーザーは発行し直さずに始められる</div>
+        <div class="mx-cell"><b>13スコープ</b>（<code>cloud-platform</code> を含む）。<code>~/.clasprc.json</code> をそのまま Secret に入れる</div>
+        <div class="mx-cell"><b>全スコープのアクセストークンを取得されうる</b></div>
+      </div></div>
+      <p class="src">出所: README「セットアップ」および <code>packages/setup-cli/src/</code>。経路 B は Apps Script API をユーザー設定画面（script.google.com/home/usersettings）で有効化する必要がある。</p>
+    </figure>
+
+    <p class="note"><b>本 Action が絞っているのはアクセストークンのスコープであり、リフレッシュトークン自体の権限は狭まらない。</b>経路 B では、Secrets に保存される refresh token は clasp が認可された時点の13スコープを持ち続ける。「本 Action は2スコープしか使わない」ことと「漏洩時の被害が2スコープ分に収まる」ことは別である。真の最小権限を得るには経路 A を使う。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表2: OAuth 同意画面の状態と refresh token の寿命</caption>
+        <thead><tr><th>アカウント種別</th><th>同意画面の設定</th><th>refresh token の寿命</th><th>症状</th></tr></thead>
+        <tbody>
+          <tr><td>いずれも</td><td>テスト（Testing）のまま</td><td><b>7日</b></td><td>初回成功の約1週間後に <code>invalid_grant</code> で停止する</td></tr>
+          <tr><td>Google Workspace</td><td>内部（Internal）</td><td>失効しない</td><td>—</td></tr>
+          <tr><td>個人 Gmail</td><td>本番（Production）に公開</td><td>失効しない</td><td>公開時の警告・確認の要否は未検証（10節）</td></tr>
+          <tr><td>いずれも</td><td>再認証ポリシーが掛かったアカウント</td><td>—</td><td><code>invalid_grant</code> / <code>invalid_rapt</code>。保存済みトークンでは突破できない</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: README「OAuth 同意画面の状態を必ず確認する」。再認証ポリシー下のアカウントは無人 CI に向かないため、専用のデプロイ用アカウントを推奨する。</p>
+    </div>
+
+    <p><code>~/.clasprc.json</code> は <code>{ tokens: { &lt;アカウント名&gt;: {...}, default: {...} } }</code> の形で複数アカウントを保持できる。本 Action は常に <code>default</code> を使い、複数あって <code>default</code> が無い場合は黙って推測せずエラーにする。エラーメッセージ中のアカウント名は、メールアドレス形式であれば伏せる（CI ログに出るため）。</p>
+
+    <h3>失効を先に検知する — <code>token-check</code> アクション</h3>
+    <p>失効は「次にデプロイが必要になった瞬間に初めて気づく」形で現れる。障害対応でロールバックしようとしたら認証が通らない、が最悪の形である。<code>token-check</code> を週次 cron に置いて先に検知する。<b>何も書き換えない</b> — refresh token は失効しない限り不変で、更新する対象がそもそも存在しないためである（設計仕様 §7.1「更新ではなく死活監視」）。</p>
+
+    <p class="note"><b>このアクションはまだリリースされていない。</b><code>v0.1.1</code> および <code>v0</code> タグには含まれないため、下の例は次のリリース以降で動作する。それまでは <code>@main</code> を指定する。</p>
+
+<pre><code>on:
+  schedule:
+    - cron: '0 3 * * 1'     # 毎週月曜
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: check
+        uses: yut0takagi/gas-deploy-action/token-check@v0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          script-id: ${{ secrets.GAS_SCRIPT_ID }}
+
+      - name: 失効していたら Issue を起票する
+        if: failure() &amp;&amp; steps.check.outputs.status == 'invalid'
+        run: gh issue create --title "GAS の認証情報が失効しました" --body "${{ steps.check.outputs.summary }}"
+        env:
+          GH_TOKEN: ${{ github.token }}</code></pre>
+
+    <div class="tbl">
+      <table>
+        <caption>表3: 死活監視の3状態</caption>
+        <thead><tr><th><code>status</code></th><th>意味</th><th>既定の挙動</th><th>該当する <code>reason</code></th></tr></thead>
+        <tbody>
+          <tr><td><code>valid</code></td><td>使える</td><td>何もしない</td><td><code>ok</code></td></tr>
+          <tr><td><code>invalid</code></td><td>使えない。<b>この状態のままではデプロイが失敗する</b></td><td>ジョブを失敗させる</td><td><code>token-invalid</code> / <code>insufficient-scope</code> / <code>unauthorized</code> / <code>api-disabled</code> / <code>access-denied</code> / <code>not-found</code></td></tr>
+          <tr><td><code>unknown</code></td><td>有効かどうか<b>判定できなかった</b>。失効したとは限らない</td><td>警告のみ</td><td><code>connectivity</code> / <code>response-invalid</code> / <code>api-error</code> / <code>unclassified</code></td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>packages/core/src/token-health.ts</code>、<code>token-check/action.yml</code>。分岐にはメッセージ本文ではなく <code>reason</code> を使う。</p>
+    </div>
+
+    <p class="note"><b><code>unknown</code> で既定ではジョブを落とさない。</b>ランナーが Google に到達できなかっただけで週次ジョブが赤くなると、本当に失効したときの赤が「またいつもの失敗」として埋もれる。監視の価値は赤が希少であることに依っている。到達性の問題まで検知したい場合は <code>fail-on-unknown: true</code> を指定する。</p>
+
+    <p><code>script-id</code> を指定すると、トークンの交換に加えて実際にそのプロジェクトを読み取れるかまで確認する（<code>project-checked</code> 出力で確認範囲が分かる）。「トークンは生きているが Apps Script API を無効化された」「対象スクリプトの権限を外された」は交換だけでは検知できない。<code>gasdeploy.yml</code> の設定モードには対応しない — 死活監視が確認するのは認証情報そのものであって、デプロイ対象の一覧ではないためである。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">03</span>deploy アクションの入出力</h2>
+    <p class="msg"><code>script-id</code> を渡せば単一プロジェクトモード、渡さなければ設定ファイルによる複数プロジェクトモードになる。両者は排他であり、混ざらない。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表4: <code>deploy</code> の入力（<code>deploy/action.yml</code> 全15項目）</caption>
+        <thead><tr><th>入力</th><th>必須</th><th>既定値</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><code>credentials</code></td><td>○</td><td>—</td><td>clasp の <code>.clasprc.json</code>、または <code>{client_id, client_secret, refresh_token}</code> の JSON</td></tr>
+          <tr><td><code>script-id</code></td><td>—</td><td>—</td><td>デプロイ先の scriptId。指定すると単一プロジェクトモードになり <code>config</code> は無視される</td></tr>
+          <tr><td><code>root-dir</code></td><td>—</td><td><code>.</code></td><td>アップロードするファイルのルート（単一プロジェクトモードのみ）</td></tr>
+          <tr><td><code>deployment-id</code></td><td>—</td><td>—</td><td>更新する既存デプロイの ID。省略すると新規作成され Web アプリの URL が変わる</td></tr>
+          <tr><td><code>project-type</code></td><td>—</td><td><code>standalone</code></td><td><code>webapp</code> / <code>addon</code> / <code>bound</code> / <code>standalone</code></td></tr>
+          <tr><td><code>ignore</code></td><td>—</td><td>—</td><td>除外パターン（改行区切り）。省略時は <code>.claspignore</code>、それも無ければ既定値</td></tr>
+          <tr><td><code>dry-run</code></td><td>—</td><td><code>false</code></td><td>差分の表示のみ行い、書き込みを行わない</td></tr>
+          <tr><td><code>create-version</code></td><td>—</td><td><code>true</code></td><td>バージョン作成とデプロイを行うかどうか</td></tr>
+          <tr><td><code>description</code></td><td>—</td><td><code>ci-&lt;sha7&gt;-&lt;run_number&gt;</code></td><td>バージョンの説明</td></tr>
+          <tr><td><code>config</code></td><td>—</td><td><code>gasdeploy.yml</code></td><td>複数プロジェクトモードの設定ファイル（<code>script-id</code> 未指定時のみ使用）</td></tr>
+          <tr><td><code>environment</code></td><td>—</td><td>—</td><td>デプロイする environment 名。<b>config モードでは必須</b></td></tr>
+          <tr><td><code>projects</code></td><td>—</td><td><code>all</code></td><td>対象プロジェクト名（カンマ区切り）</td></tr>
+          <tr><td><code>comment-on-pr</code></td><td>—</td><td><code>false</code></td><td>サマリを PR にコメントする</td></tr>
+          <tr><td><code>github-token</code></td><td>—</td><td><code>${{ github.token }}</code></td><td>PR コメントに使うトークン</td></tr>
+          <tr><td><code>comment-key</code></td><td>—</td><td>environment または <code>default</code></td><td>コメントを識別するキー</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>deploy/action.yml</code>（実装値をそのまま転記）。<code>runs.using</code> は <code>node24</code>、エントリは <code>dist/index.cjs</code>。</p>
+    </div>
+
+    <div class="tbl">
+      <table>
+        <caption>表5: <code>deploy</code> の出力（全7項目）</caption>
+        <thead><tr><th>出力</th><th>モード</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><code>changed</code></td><td>共通</td><td>差分があったかどうか（<code>true</code> / <code>false</code>）</td></tr>
+          <tr><td><code>version-number</code></td><td>単一</td><td>作成されたバージョン番号</td></tr>
+          <tr><td><code>previous-version-number</code></td><td>単一</td><td>更新前にデプロイが指していたバージョン番号（<code>deployment-id</code> 指定時のみ）。<b>更新前に読み取った値なので API の読み取り一貫性の影響を受けない</b></td></tr>
+          <tr><td><code>deployment-id</code></td><td>単一</td><td>更新または作成されたデプロイ ID</td></tr>
+          <tr><td><code>web-app-url</code></td><td>単一</td><td>Web アプリの URL（該当する場合）</td></tr>
+          <tr><td><code>summary</code></td><td>共通</td><td>人間可読のサマリ（Markdown）</td></tr>
+          <tr><td><code>deployments</code></td><td>複数</td><td>各プロジェクトの結果（JSON 配列）。対象は失敗・未実行を含め必ず1件ずつ入る</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>deploy/action.yml</code>。README の入出力表は <code>config</code> / <code>environment</code> / <code>projects</code> / <code>deployments</code> を欠いており、本表が実装に一致する（11節）。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">04</span>複数プロジェクト構成</h2>
+    <p class="msg">1リポジトリに複数の GAS プロジェクトを置き、環境ごとにデプロイできる。逐次実行し最初の失敗で停止するが、<b>全ターゲットの状態を必ず出力する</b>ため、赤いジョブを見た人が Apps Script のコンソールを開かずに現状を把握できる。</p>
+
+<pre><code>version: 1
+
+defaults:
+  ignore:
+    - "**/*.test.js"
+    - "node_modules/**"
+
+projects:
+  web-app:
+    rootDir: apps/web-app/dist
+    type: webapp
+    environments:
+      dev:
+        scriptId: ${DEV_WEBAPP_SCRIPT_ID}
+      prod:
+        scriptId: ${PROD_WEBAPP_SCRIPT_ID}
+        deploymentId: ${PROD_WEBAPP_DEPLOYMENT_ID}
+
+  sheet-tools:
+    rootDir: apps/sheet-tools/dist
+    type: bound
+    environments:
+      prod:
+        scriptId: ${SHEET_TOOLS_SCRIPT_ID}</code></pre>
+
+    <p class="note"><b><code>${VAR}</code> は GitHub Actions の式ではない。</b><code>gasdeploy.yml</code> はリポジトリ内のただの YAML なので <code>${{ }}</code> は展開されない。本 Action が <code>${VAR}</code> を<b>環境変数から</b>展開するため、ワークフローの <code>env:</code> で渡す。未定義の変数はエラーになる（空の scriptId で API を叩いて意味不明な 404 になるのを防ぐため）。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表6: <code>deployments</code> 出力の <code>status</code> と意味</caption>
+        <thead><tr><th>status</th><th>意味</th><th>付随する情報</th></tr></thead>
+        <tbody>
+          <tr><td><code>deployed</code></td><td>デプロイが完了した</td><td><code>versionNumber</code> / <code>previousVersionNumber</code> / <code>deploymentId</code> / <code>webAppUrl</code></td></tr>
+          <tr><td><code>unchanged</code></td><td>差分がなく書き込みを行わなかった</td><td>—</td></tr>
+          <tr><td><code>failed</code></td><td>このプロジェクトで失敗した</td><td><code>error</code>（失敗メッセージ）</td></tr>
+          <tr><td><code>skipped</code></td><td>指定環境を持たない、または失敗停止で未着手</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>deploy/action.yml</code> の <code>deployments</code> 定義、<code>packages/core/src/multi-deployer.ts</code>。各要素は <code>project</code> / <code>environment</code> / <code>scriptId</code> / <code>status</code> を必ず持つ。</p>
+    </div>
+
+    <h3>環境が無いプロジェクトの扱い</h3>
+    <p><code>projects: all</code> のとき、指定環境を持たないプロジェクトはスキップされる（<code>prod</code> しか持たないプロジェクトがあってよい）。一方 <b>プロジェクト名を明示指定した場合は、環境が無ければエラー</b>になる。名指しした対象がデプロイされないまま成功と表示されるのを防ぐためである。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">05</span>PR への差分コメント</h2>
+    <p class="msg"><code>dry-run</code> と組み合わせると、マージ前に「何が本番に出るか」を PR 上で確認できる。コメントの失敗はデプロイの失敗にしない設計になっている。</p>
+
+<pre><code>permissions:
+  contents: read
+  pull-requests: write     # これが無いと 403 になる
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: yut0takagi/gas-deploy-action/deploy@v0
+        with:
+          credentials: ${{ secrets.CLASPRC_JSON }}
+          environment: prod
+          dry-run: true
+          comment-on-pr: true</code></pre>
+
+    <p>コメントには隠しマーカー（<code>&lt;!-- gas-deploy-action:&lt;key&gt; --&gt;</code>）を埋め込んでおり、<b>同じキーのコメントは新規作成ではなく更新される</b>。push のたびに積み上がることはない。キーの既定値は複数プロジェクトモードでは environment、単一プロジェクトモードでは <code>default</code> である。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表7: コメント機能の設計上の割り切り</caption>
+        <thead><tr><th>状況</th><th>挙動</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td>コメント投稿に失敗した</td><td>警告に留め、ジョブは失敗にしない</td><td>成功した本番デプロイを赤く報告すると、ロールバック自動化や人間の判断を誤らせる</td></tr>
+          <tr><td>PR 以外の実行（push など）</td><td>何もしない。失敗もしない</td><td>「PR ではない」は異常ではなく通常の状態</td></tr>
+          <tr><td>フォークからの <code>pull_request</code></td><td>投稿できない</td><td>既定の <code>GITHUB_TOKEN</code> が読み取り専用になる GitHub 側の仕様</td></tr>
+          <tr><td>単一プロジェクトモードを1ワークフローで複数回</td><td>後の実行が前のコメントを上書きする</td><td>既定キーが固定のため。<code>comment-key</code> で明示的に分ける必要がある</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>deploy/src/comment.ts</code>、README「PR に差分をコメントする」。作成・更新・キーによる分離は実 GitHub API で確認済み（2026-08-10）。403 の経路と100件超のページングは未検証。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">06</span>rollback アクション</h2>
+    <p class="msg">ロールバックはデプロイが指すバージョン番号を差し替えるだけの操作である。<b>HEAD のソースは戻らない</b>ため、リポジトリ側を revert しなければ次のデプロイで静かに巻き戻る。</p>
+
+    <p>ファイルの書き込みもバージョンの作成も行わない。バージョンは Apps Script 側に永続する（削除する API が存在しない）ため、過去のバージョンはいつでも指し直せる。URL も変わらない。</p>
+
+    <figure>
+      <figcaption>図表3: リポジトリを直さないまま次のデプロイを走らせた場合（濃紺が事故の発生点）</figcaption>
+      <div class="fig-scroll"><div class="chevrons">
+        <div class="chev">ロールバック実行<small>デプロイは旧バージョンを指す</small></div>
+        <div class="chev">HEAD は問題コードのまま<small>エディタで見えるソース</small></div>
+        <div class="chev">無関係な1行を push<small>差分は「その後の変更」だけ</small></div>
+        <div class="chev on">HEAD 全体のバージョンが作られる<small>問題コードを含む</small></div>
+        <div class="chev on">本番が再び壊れる<small>ロールバックが静かに巻き戻る</small></div>
+      </div></div>
+      <p class="src">出所: README「ロールバックは HEAD のソースを戻さない」。本 Action は実行のたびにこの警告を出す。</p>
+    </figure>
+
+    <h3>デプロイ直後のロールバックでは <code>version-number</code> を明示する</h3>
+    <p><code>version-number</code> を省略した「1つ前に戻す」は、現在のバージョンを API から読んで計算する。ところが Apps Script API のデプロイ読み取りは書き込み直後の一貫性を保証しない。実測では <code>deployments.list</code> が30秒以上にわたり古い値を返し続け、しかも新旧の値の間で振動した。</p>
+    <p>緩和策として、現在のバージョンを一覧ではなく単体取得（<code>deployments.get</code>、実測でより速く収束する）から読み、さらに連続2回の読み取りが一致するまで待つ。一致しなければ推測せず失敗して明示を促す。<b>ただしこれは確率を下げるだけで保証ではない</b>（2回とも同じ古いレプリカに当たると通ってしまう事象を実測で観測した）。</p>
+    <p>確実な受け渡しには <code>deploy</code> の <code>previous-version-number</code> を使う。デプロイを更新する<b>前</b>に読み取った値なので、この問題の影響を受けない。</p>
+
+<pre><code>- id: deploy
+  uses: yut0takagi/gas-deploy-action/deploy@v0
+  with:
+    credentials: ${{ secrets.CLASPRC_JSON }}
+    script-id: ${{ secrets.GAS_SCRIPT_ID }}
+    deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}
+
+- name: スモークテスト
+  id: smoke
+  continue-on-error: true
+  run: ./scripts/smoke-test.sh
+
+- name: 失敗したら直前のバージョンに戻す
+  if: steps.smoke.outcome == 'failure'
+  uses: yut0takagi/gas-deploy-action/rollback@v0
+  with:
+    credentials: ${{ secrets.CLASPRC_JSON }}
+    script-id: ${{ secrets.GAS_SCRIPT_ID }}
+    deployment-id: ${{ secrets.GAS_DEPLOYMENT_ID }}
+    version-number: ${{ steps.deploy.outputs.previous-version-number }}</code></pre>
+
+    <div class="tbl">
+      <table>
+        <caption>表8: <code>rollback</code> の入力（<code>rollback/action.yml</code> 全9項目）</caption>
+        <thead><tr><th>入力</th><th>必須</th><th>既定値</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><code>credentials</code></td><td>○</td><td>—</td><td><code>deploy</code> と同じ</td></tr>
+          <tr><td><code>script-id</code></td><td>—</td><td>—</td><td>指定すると <code>config</code> を読み込まない</td></tr>
+          <tr><td><code>deployment-id</code></td><td>—</td><td>—</td><td>省略時、バージョン付きデプロイが<b>ちょうど1つ</b>のときだけ自動特定。<code>config</code> の値より優先される</td></tr>
+          <tr><td><code>version-number</code></td><td>—</td><td>—</td><td>戻り先。省略すると現在の1つ前。1以上の整数のみ受け付ける</td></tr>
+          <tr><td><code>dry-run</code></td><td>—</td><td><code>false</code></td><td>戻り先の実在確認だけ行い、デプロイを書き換えない</td></tr>
+          <tr><td><code>description</code></td><td>—</td><td><code>rollback to v&lt;N&gt; (was v&lt;M&gt;)</code></td><td>デプロイに設定する説明</td></tr>
+          <tr><td><code>config</code></td><td>—</td><td><code>gasdeploy.yml</code></td><td><code>script-id</code> 未指定時に読む設定ファイル</td></tr>
+          <tr><td><code>environment</code></td><td>—</td><td>—</td><td>config モードでは必須</td></tr>
+          <tr><td><code>project</code></td><td>—</td><td>—</td><td>config モードでは必須。<b><code>all</code> は不可</b></td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>rollback/action.yml</code>。<code>all</code> を許さないのは、障害時に戻したいのは壊れた1プロジェクトであって、正常な残りまで巻き戻すのがほぼ確実に事故になるため。</p>
+    </div>
+
+    <div class="tbl">
+      <table>
+        <caption>表9: <code>rollback</code> の出力（全6項目）</caption>
+        <thead><tr><th>出力</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><code>rolled-back</code></td><td>実際に書き換えたか。dry-run と「すでに戻り先を指していた」場合は <code>false</code></td></tr>
+          <tr><td><code>from-version</code></td><td>ロールバック前に指していたバージョン番号</td></tr>
+          <tr><td><code>to-version</code></td><td>戻り先のバージョン番号（dry-run では戻す予定のもの）</td></tr>
+          <tr><td><code>deployment-id</code></td><td>対象となったデプロイの ID</td></tr>
+          <tr><td><code>web-app-url</code></td><td>Web アプリの URL。ロールバックしても変わらない</td></tr>
+          <tr><td><code>summary</code></td><td>人間可読のサマリ（Markdown）</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: <code>rollback/action.yml</code>。現在より新しいバージョンの指定も可能で、その場合はロールフォワードである旨を警告して実行する。</p>
+    </div>
+
+    <p><code>@HEAD</code> デプロイは常に最新のソースを指すため、バージョンを指し直す操作が成立しない。対象から除外し、指定された場合は専用のエラーを返す。<code>deployment-id</code> を省略してバージョン付きデプロイが複数ある場合は、当てずっぽうに選ばず候補を列挙して停止する。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">07</span>事故が起きやすい箇所</h2>
+    <p class="msg">この Action の制限事項は「気をつけて使う」で済むものではなく、<b>設定を1つ書き忘れると本番が静かに壊れる</b>類のものである。運用側の対策まで含めて把握する必要がある。</p>
+
+    <figure>
+      <figcaption>図表4: 主要リスクと対策</figcaption>
+      <div class="fig-scroll"><div class="matrix" style="--mx-cols:2;--mx-label:132px">
+        <div class="mx-h"></div>
+        <div class="mx-h">何が起きるか</div>
+        <div class="mx-h">本 Action の挙動と運用側の対策</div>
+
+        <div class="mx-label"><small>01</small><code>deployment-id</code> の省略</div>
+        <div class="mx-cell">毎回新しいデプロイと新しい URL が作られ、既存 URL のトラフィックは古いデプロイに取り残される。<b>GAS の CI で最も起きやすい本番事故</b></div>
+        <div class="mx-cell"><code>project-type</code> が <code>webapp</code> / <code>addon</code> で未指定かつ差分があれば実行前に警告。<b>Web アプリ運用ではほぼ必ず指定する</b>。指定していなければロールバックもできない</div>
+
+        <div class="mx-label"><small>02</small><code>root-dir</code> の誤指定</div>
+        <div class="mx-cell"><code>updateContent</code> はローカルの内容で全ファイルを置き換えるため、稼働中スクリプトから大半のファイルが消える</div>
+        <div class="mx-cell">リモートの半分以上が削除される場合は警告するが、<b>実行そのものは止めない</b>。まず <code>dry-run</code> で確認する</div>
+
+        <div class="mx-label"><small>03</small>部分的な失敗</div>
+        <div class="mx-cell"><code>updateContent</code> 成功後に <code>versions.create</code> が 5xx で失敗すると、再実行しても差分ゼロと判定され<b>何もせず成功したかのように終了する</b></div>
+        <div class="mx-cell">POST は 5xx で自動リトライしない（二重にバージョンが作られる方が危険）。再実行では直らない可能性を明示。差分を手で確認するか内容を変更してから再実行する</div>
+
+        <div class="mx-label"><small>04</small>複数プロジェクトの途中失敗</div>
+        <div class="mx-cell">逐次実行のため以降が未実行のまま残り、既にデプロイされた分も戻らない。全体を原子的に扱えない</div>
+        <div class="mx-cell"><code>deployments</code> 出力の <code>status</code> で各プロジェクトの状態を必ず確認する</div>
+
+        <div class="mx-label alt"><small>05</small>デプロイ上限</div>
+        <div class="mx-cell">バージョン付きデプロイは最大20個（<code>@HEAD</code> は別枠）。21個目は <code>FAILED_PRECONDITION</code> で失敗する</div>
+        <div class="mx-cell">18件に達した時点で警告。自動回収は未実装のため、手動整理が必要</div>
+
+        <div class="mx-label alt"><small>06</small>非マニフェスト JSON</div>
+        <div class="mx-cell"><code>appsscript.json</code> 以外の <code>.json</code>（例 <code>config.json</code>）は黙って除外される。警告も diff エントリも出ない</div>
+        <div class="mx-cell">Apps Script が保持できないため clasp と同じ挙動。<code>root-dir</code> に設定 JSON を混在させない</div>
+      </div></div>
+      <p class="src">出所: README「制限事項」「デプロイ上限と deployment-id」、<code>packages/core/src/{api-client,differ,file-collector}.ts</code>。上限20件は実測で確認。</p>
+    </figure>
+
+    <p class="note"><b>サービスアカウントは使えない。</b>Apps Script API が Google 側の仕様として受け付けない。clasp v3 の <code>--adc</code> オプションも公式に EXPERIMENTAL / NOT WORKING とされている。これは本 Action の制約ではなく Google 側の制約である。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">08</span><code>.claspignore</code> の解釈</h2>
+    <p class="msg"><code>.claspignore</code> は glob マッチであり gitignore の意味論を持たない。gitignore の感覚で書いたパターンは、エラーにも警告にもならず<b>静かに何も除外しない</b>。</p>
+
+    <p>テストを除外したつもりで実際には本番にテストコードがデプロイされ続ける、という事故を起こしうる箇所である。この挙動は実測で確認し、clasp v3.3.0 自身の判定に合わせてあるため、本 Action 側で「直感的に」修正することはしない。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表10: よくある誤りと正しい書き方</caption>
+        <thead><tr><th>書き方（誤り）</th><th>実際の挙動</th><th>正しい書き方</th></tr></thead>
+        <tbody>
+          <tr><td><code>/Code.js</code></td><td>ルート限定にならず、そもそも何も除外しない</td><td><code>Code.js</code></td></tr>
+          <tr><td><code>build/</code></td><td>ディレクトリごと除外にならない</td><td><code>build/**</code></td></tr>
+          <tr><td><code>ui/</code></td><td>ディレクトリごと除外にならない</td><td><code>ui/**</code></td></tr>
+          <tr><td><code>secrets.js</code></td><td>ルート直下のみ対象。<code>nested/secrets.js</code> は除外されない</td><td><code>**/secrets.js</code></td></tr>
+          <tr><td><code>*.test.js</code></td><td>ルート以外のテストファイルが本番に出力される</td><td><code>**/*.test.js</code></td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: README「.claspignore は gitignore ではない」、<code>packages/core/src/ignore.ts</code> および <code>tests/clasp-compat.test.ts</code>。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">09</span>品質保証の現状</h2>
+    <p class="msg">clasp 互換を自前で保証するリスクは、実際の clasp の判定と突き合わせるゴールデンテストで潰している。実 GAS への E2E も週次ワークフローとして整備した。<b>残る穴は、その E2E に必要な Secrets がまだ設定されておらず、一度も実行されていないことである。</b></p>
+
+    <div class="tbl">
+      <table>
+        <caption>表11: テスト戦略5レベルと実施状況</caption>
+        <thead><tr><th>レベル</th><th>内容</th><th>実行頻度</th><th>状況</th></tr></thead>
+        <tbody>
+          <tr><td>1. core 単体</td><td>file-collector・differ・config・エラー分類</td><td>常時</td><td>実施済み</td></tr>
+          <tr><td>2. API クライアントのモック</td><td>429 リトライ・401 分類の再現</td><td>常時</td><td>実施済み</td></tr>
+          <tr><td>3. clasp 互換ゴールデン</td><td>実際の clasp の判定結果と出力を突合</td><td>常時</td><td>実施済み（<code>tests/clasp-compat.test.ts</code>）</td></tr>
+          <tr><td>4. 実 GAS への E2E</td><td>push → 検証 → デプロイ → ロールバック → 復元</td><td>週次＋手動</td><td>ワークフロー整備済み・<b>Secrets 未設定で未実行</b></td></tr>
+          <tr><td>5. dist 同期チェック</td><td>ビルド差分が出たら CI を失敗させる</td><td>常時</td><td>実施済み（3バンドル）</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: 設計仕様 §8、<code>.github/workflows/ci.yml</code>、<code>.github/workflows/e2e.yml</code>、<code>npm test</code> 実行結果（348件/25ファイル、全パス、2026-08-14）。</p>
+    </div>
+
+    <p>CI は <b>型検査・テスト・ビルド・dist 同期・バンドル起動</b>の5ゲートで構成する。最後のゲートは実際に3つのバンドルを <code>node</code> で起動し、我々のエラー処理まで到達しているか（<code>::error::</code> が出るか、かつ <code>SyntaxError</code> 等が出ないか）で判定する。特定のメッセージ文字列で判定していないのは、入力仕様が変わるたびに壊れるのを避けるためである。</p>
+
+    <p>E2E は <code>pull_request</code> では意図的に起動しない。Secrets を要するため、フォークからの PR で走らせるとすべて失敗し、外部コントリビュータの PR が理由もなく赤くなる。週次と手動のみとし、さらに Secrets が未設定なら実行せず、<b>「実行しなかった」ことをジョブサマリに明記する</b>（黙って緑にすると、動いていないのに動いているつもりになる）。</p>
+
+    <p class="note">この起動ゲートは実際の障害から生まれている。CJS バンドルを <code>.js</code> のまま置くと <code>package.json</code> の <code>"type": "module"</code> により ESM と解釈され、型検査・テスト・dist 同期をすべて通過したうえで本番だけが壊れた。現在は両アクションともエントリを <code>dist/index.cjs</code> にしている。</p>
+
+    <p>実 API に対する検証（<code>.claspignore</code> の解釈、デプロイ上限20、スコープ2つでの全操作成功、Web アプリ URL の維持、PR コメントの作成・更新・キー分離、ロールバックの読み取り一貫性）は都度スクリプトで実施し、結果を <code>docs/superpowers/notes/2026-08-09-api-verification.md</code> に記録している。<code>runs.using: node24</code> も実ランナーで動作確認済み（2026-08-09）。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">10</span>完成度の評価</h2>
+    <p class="msg">出荷済みで実用に足る。段階リリース計画の15項目のうち13項目が実装済みで、<b>v1.0 スコープの実装はすべて揃った</b>。v2.0 スコープの目玉2つ（PR コメント・rollback）も先取りしている。残るのは v1.0 のリリース判断と、人が確かめるしかない未検証事項である。</p>
+
+    <figure>
+      <figcaption>図表5: 段階リリース計画に対する到達状況（濃紺が現在の到達段階）</figcaption>
+      <div class="fig-scroll"><div class="matrix" style="--mx-cols:3;--mx-label:104px">
+        <div></div>
+        <div class="mx-h stage first"><small>v0.1</small>内部検証</div>
+        <div class="mx-h stage on"><small>v1.0</small>公開・Marketplace</div>
+        <div class="mx-h stage"><small>v2.0</small>高度な安全性</div>
+
+        <div class="mx-label alt">計画スコープ</div>
+        <div class="mx-cell"><ul>
+          <li>deploy（単一）</li><li>API 直叩き</li><li>differ + dry-run</li>
+          <li>既存デプロイの更新</li><li>エラーメッセージ整備</li></ul></div>
+        <div class="mx-cell"><ul>
+          <li>gasdeploy.yml</li><li>setup-cli 完成版</li><li>refresh token 死活監視</li>
+          <li>job summary</li><li>README・サンプル</li><li>実 GAS E2E</li></ul></div>
+        <div class="mx-cell"><ul>
+          <li>PR 差分コメント</li><li>rollback</li>
+          <li>バージョン↔コミットの対応</li>
+          <li>上限の自動回収</li><li>変更分のみデプロイ</li></ul></div>
+
+        <div class="mx-label alt">実装済み</div>
+        <div class="mx-cell"><b>5 / 5</b></div>
+        <div class="mx-cell"><b>6 / 6</b>（死活監視・E2E を追加）</div>
+        <div class="mx-cell"><b>3 / 5</b>（コメント・rollback・由来追跡）</div>
+
+        <div class="mx-label alt">リリース</div>
+        <div class="mx-cell">v0.1.0 / v0.1.1（+ <code>v0</code> 追従タグ）</div>
+        <div class="mx-cell">実装は完了。<b>リリースは未実施</b></div>
+        <div class="mx-cell">既存分は <code>v0</code> 系で提供済み</div>
+      </div></div>
+      <p class="src">出所: 設計仕様 §9 の段階リリース表を項目化し、<code>git log</code> / <code>gh release list</code> / 各実装ファイルと突合（2026-08-14）。v1.0 の「E2E」は週次ワークフローの整備をもって実装済みとし、未実行である事実は下表に記載する。</p>
+    </figure>
+
+    <div class="tbl">
+      <table>
+        <caption>表12: 未実装項目と未検証事項</caption>
+        <thead><tr><th>区分</th><th>項目</th><th>影響</th></tr></thead>
+        <tbody>
+          <tr><td>未実行</td><td>実 GAS への E2E（週次）</td><td>ワークフローは整備済みだが、<code>GAS_E2E_CREDENTIALS</code> / <code>GAS_E2E_SCRIPT_ID</code> / <code>GAS_E2E_DEPLOYMENT_ID</code> が未設定のため一度も走っていない。設定するまで clasp 互換の継続的な保証は得られない</td></tr>
+          <tr><td>未実装</td><td>デプロイ上限の自動回収</td><td>20件到達時は手動整理が必要（18件で警告は出る）</td></tr>
+          <tr><td>未実装</td><td>変更のあったプロジェクトのみデプロイ</td><td>モノレポで無変更プロジェクトにも API 呼び出しが走る（差分ゼロなら書き込みはしない）</td></tr>
+          <tr><td>未検証</td><td><code>script.projects</code> が審査対象スコープか</td><td>個人 Gmail アカウントでの「確認されていないアプリ」警告の有無。README の説明の重さが変わる</td></tr>
+          <tr><td>未検証</td><td>setup-cli のループバック認可</td><td>Desktop タイプの OAuth クライアントが任意ポートの <code>127.0.0.1</code> を事前登録なしで受け入れる前提。固定ポート登録が必要なら手順書が変わる（実装はポート固定で対応可能）</td></tr>
+          <tr><td>未検証</td><td>PR コメントの 403 経路・100件超のページング</td><td>コメント数が多い PR での更新対象の取りこぼし</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: 設計仕様 §9・§10、README「既知の未検証事項」、実装の網羅確認（<code>deploy</code> / <code>rollback</code> の2アクションのみ存在し、死活監視アクションのディレクトリは無い）。</p>
+    </div>
+
+    <p class="note"><b>「未検証」は「動かない」ではない。</b>ロールバックの読み取り一貫性のように、実 API で検証したうえで<b>緩和策込みで残っているリスク</b>と、上表のように<b>まだ測っていない</b>ものは区別している。前者は06節に運用上の回避策（<code>version-number</code> の明示）を明記した。</p>
+  </section>
+
+  <section>
+    <h2><span class="no">11</span>推奨アクション</h2>
+    <p class="msg">実装側の残件は消えた。次に必要なのは<b>人が Google Cloud Console とブラウザで確かめる2件</b>と、<b>E2E を実際に走らせるための Secrets 設定</b>である。これが済めば v1.0 として公開できる。</p>
+
+    <div class="tbl">
+      <table>
+        <caption>表13: 次に行うこと</caption>
+        <thead><tr><th>優先</th><th>アクション</th><th>内容と完了条件</th></tr></thead>
+        <tbody>
+          <tr><td>高</td><td><code>script.projects</code> の審査該否を実測する<br><span class="req">要: ブラウザ操作</span></td><td>個人 Gmail の GCP プロジェクトで同意画面を本番公開し、警告・確認要求が出るかを記録する。README の該当節を断定形に書き換えられる状態が完了条件</td></tr>
+          <tr><td>高</td><td>setup-cli のループバック認可を実環境で通す<br><span class="req">要: ブラウザ操作</span></td><td><code>npm run setup</code> を実行し、Desktop クライアントで任意ポートの認可が通ることを確認する。通らなければポートを固定し手順書を更新する</td></tr>
+          <tr><td>高</td><td>E2E 用の Secrets を設定する</td><td>専用のテスト用 GAS プロジェクトを1つ用意し、<code>GAS_E2E_CREDENTIALS</code> / <code>GAS_E2E_SCRIPT_ID</code> / <code>GAS_E2E_DEPLOYMENT_ID</code> を登録する。<b>本番プロジェクトを指定してはならない</b>（E2E は HEAD を書き換えて復元する）。手動実行で1回グリーンになることが完了条件</td></tr>
+          <tr><td>中</td><td>v1.0 をリリースする</td><td>上記3件の結果を README に反映したうえでタグを打つ。<code>token-check</code> の追加は <code>v0</code> 追従タグにも載る</td></tr>
+          <tr><td>低</td><td>PR コメントの境界条件を検証する</td><td>403 の経路と、100件を超えるコメントを持つ PR でのページング。現状は更新対象を取りこぼす可能性が残る</td></tr>
+          <tr><td>低</td><td>v2.0 の残り2機能を判断する</td><td>デプロイ上限の自動回収（オプトイン）と、変更のあったプロジェクトのみデプロイ。いずれも現状は警告・逐次実行で運用可能</td></tr>
+        </tbody>
+      </table>
+      <p class="src">出所: 10節の未実装・未検証一覧（2026-08-14 時点）。README の不整合4件、死活監視アクション、E2E ワークフローは実施済みのため本表から除いた。</p>
+    </div>
+  </section>
+
+  <footer class="doc-footer">
+    <span>gas-deploy-action 仕様・運用ドキュメント ／ 対象 v0.1.1 + 未リリース分</span>
+    <span>出所: リポジトリ実装・設計仕様書・実 API 検証ノート（2026-08-14 時点）</span>
+  </footer>
+
+</div>
+</body>
+</html>
