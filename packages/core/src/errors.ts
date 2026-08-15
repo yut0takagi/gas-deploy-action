@@ -1,4 +1,22 @@
 /**
+ * 失敗の機械可読な識別子。
+ *
+ * `status` は HTTP ステータスしか表せず、トークン交換の失敗（同じ 400 が失効とスコープ不足の
+ * 両方で返る）を区別できない。死活監視のように「なぜ落ちたか」で出力を変える呼び出し側が、
+ * メッセージ文字列の一致に頼らずに分岐できるようにするためのもの。
+ */
+export type GasErrorCode =
+  | 'connectivity'
+  | 'insufficient-scope'
+  | 'token-invalid'
+  | 'response-invalid'
+  | 'unauthorized'
+  | 'api-disabled'
+  | 'access-denied'
+  | 'not-found'
+  | 'api-error';
+
+/**
  * `cause` には API の生レスポンスなど、秘匿情報を含みうる文字列が入る。
  * ユーザーに見せてよいのは `format()` の出力だけで、`cause` は決して直接ログに出さないこと。
  * エラーオブジェクトをそのまま文字列化すると Node が cause chain を展開して出力する点に注意。
@@ -12,12 +30,16 @@ export interface ErrorDetails {
    * メッセージ本文は将来変わりうるので、分岐に使ってはならない。
    */
   status?: number;
+  /** 失敗の種別。`format()` には現れないため、ユーザー向け文言とは独立に変更できる。 */
+  code?: GasErrorCode;
 }
 
 export class GasDeployError extends Error {
   readonly nextSteps: string[];
   /** API 由来のエラーの場合のみ設定される。`format()` には現れない。 */
   readonly status?: number;
+  /** 失敗の種別。分類済みのエラーにのみ設定される。`format()` には現れない。 */
+  readonly code?: GasErrorCode;
 
   constructor(message: string, details: ErrorDetails = {}) {
     super(message, { cause: details.cause });
@@ -25,6 +47,9 @@ export class GasDeployError extends Error {
     this.nextSteps = details.nextSteps ?? [];
     if (details.status !== undefined) {
       this.status = details.status;
+    }
+    if (details.code !== undefined) {
+      this.code = details.code;
     }
   }
 
@@ -44,6 +69,7 @@ export function classifyApiError(status: number, body: string): GasDeployError {
     return new GasDeployError('Apps Script API の認証に失敗しました (401)', {
       cause: body,
       status,
+      code: 'unauthorized',
       nextSteps: [
         'refresh token が失効している可能性があります。OAuth 同意画面が「テスト」状態の場合、refresh token は7日で失効します。「本番」または「内部」に変更してください',
         'デプロイに使う Google アカウントのパスワードが変更されていないか確認してください',
@@ -58,6 +84,7 @@ export function classifyApiError(status: number, body: string): GasDeployError {
       return new GasDeployError('Apps Script API が有効化されていません (403)', {
         cause: body,
         status,
+        code: 'api-disabled',
         nextSteps: [
           'https://script.google.com/home/usersettings を開き「Google Apps Script API」をオンにしてください',
           'GCP プロジェクト側でも Apps Script API を有効化してください',
@@ -68,6 +95,7 @@ export function classifyApiError(status: number, body: string): GasDeployError {
     return new GasDeployError('Apps Script プロジェクトへのアクセスが拒否されました (403)', {
       cause: body,
       status,
+      code: 'access-denied',
       nextSteps: [
         '認証に使ったアカウントに、対象スクリプトの編集権限があるか確認してください',
         '要求スコープに script.projects と script.deployments が含まれているか確認してください',
@@ -79,6 +107,7 @@ export function classifyApiError(status: number, body: string): GasDeployError {
     return new GasDeployError('Apps Script プロジェクトが見つかりません (404)', {
       cause: body,
       status,
+      code: 'not-found',
       nextSteps: [
         'scriptId が正しいか確認してください（スクリプトエディタの「プロジェクトの設定」で確認できます）',
         '認証に使ったアカウントに、対象スクリプトの閲覧権限があるか確認してください',
@@ -89,6 +118,7 @@ export function classifyApiError(status: number, body: string): GasDeployError {
   return new GasDeployError(`Apps Script API がエラーを返しました (${status})`, {
     cause: body,
     status,
+    code: 'api-error',
     nextSteps: ['しばらく待って再実行してください', 'Google Workspace のステータスダッシュボードで障害情報を確認してください'],
   });
 }
