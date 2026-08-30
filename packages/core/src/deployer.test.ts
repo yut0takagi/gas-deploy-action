@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { DEPLOYMENT_COUNT_WARN_THRESHOLD, deploy } from './deployer.js';
+import { GasDeployError } from './errors.js';
 import type { AppsScriptClient } from './api-client.js';
 import type { Deployment, ScriptFile } from './types.js';
 
@@ -29,6 +30,20 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   return client as unknown as AppsScriptClient & typeof client;
+}
+
+/**
+ * ローカルは makeProject() の2件（appsscript + Code）。リモートに3件を足すことで
+ * 5件中3件（60%）が削除される、事故の規模の差分を作る。
+ */
+function massDeletionRemote(): ScriptFile[] {
+  return [
+    { name: 'appsscript', type: 'JSON', source: MANIFEST },
+    { name: 'Code', type: 'SERVER_JS', source: 'function main() {}' },
+    { name: 'Gone1', type: 'SERVER_JS', source: 'a' },
+    { name: 'Gone2', type: 'SERVER_JS', source: 'b' },
+    { name: 'Gone3', type: 'SERVER_JS', source: 'c' },
+  ];
 }
 
 function baseOptions(rootDir: string) {
@@ -136,20 +151,83 @@ describe('deploy', () => {
 
   it('warns when most of the remote files would be deleted', async () => {
     const rootDir = await makeProject();
-    const client = fakeClient({
-      getContent: vi.fn(async () => [
-        { name: 'appsscript', type: 'JSON', source: MANIFEST },
-        { name: 'Code', type: 'SERVER_JS', source: 'function main() {}' },
-        { name: 'Gone1', type: 'SERVER_JS', source: 'a' },
-        { name: 'Gone2', type: 'SERVER_JS', source: 'b' },
-        { name: 'Gone3', type: 'SERVER_JS', source: 'c' },
-      ]),
-    });
+    const client = fakeClient({ getContent: vi.fn(async () => massDeletionRemote()) });
 
     const result = await deploy(client, { ...baseOptions(rootDir), dryRun: true });
 
     expect(result.diff.deleted).toEqual(['Gone1', 'Gone2', 'Gone3']);
     expect(result.warnings.join('\n')).toContain('削除されます');
+  });
+
+  // 事故（root-dir の誤指定・ビルド失敗）で稼働中のスクリプトが消えるのを防ぐのが目的。
+  // 判定そのものは dry-run のテストで確認済みなので、ここでは「書かずに止まるか」を見る。
+  it('refuses to write when most of the remote files would be deleted', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({ getContent: vi.fn(async () => massDeletionRemote()) });
+
+    await expect(deploy(client, baseOptions(rootDir))).rejects.toThrowError(GasDeployError);
+    expect(client.updateContent).not.toHaveBeenCalled();
+    expect(client.createVersion).not.toHaveBeenCalled();
+  });
+
+  it('names the files that would be deleted so the cause is identifiable', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({ getContent: vi.fn(async () => massDeletionRemote()) });
+
+    const error = await deploy(client, baseOptions(rootDir)).then(
+      () => undefined,
+      (e: unknown) => e as GasDeployError,
+    );
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect(error!.nextSteps.join('\n')).toContain('Gone1');
+    expect(error!.nextSteps.join('\n')).toContain('root-dir');
+    expect(error!.nextSteps.join('\n')).toContain('allow-delete');
+  });
+
+  it('proceeds when allowDelete opts in to the deletion', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({ getContent: vi.fn(async () => massDeletionRemote()) });
+
+    const result = await deploy(client, { ...baseOptions(rootDir), allowDelete: true });
+
+    expect(result.changed).toBe(true);
+    expect(client.updateContent).toHaveBeenCalled();
+  });
+
+  // dry-run は「実際に走らせたらどうなるか」を見るためのもの。ここで失敗させると、
+  // 削除内容を確認してから allow-delete を判断する手順が踏めなくなる。
+  it('still reports the diff under dry-run instead of refusing', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({ getContent: vi.fn(async () => massDeletionRemote()) });
+
+    const result = await deploy(client, { ...baseOptions(rootDir), dryRun: true });
+
+    expect(result.diff.deleted).toEqual(['Gone1', 'Gone2', 'Gone3']);
+    expect(client.updateContent).not.toHaveBeenCalled();
+  });
+
+  // 通常の削除まで止めると、ファイルを消すたびに allow-delete が要る。やがて恒久的に
+  // true で置きっぱなしにされ、本当に止めたい事故のときにも素通りするようになる。
+  it('does not block a small number of deletions', async () => {
+    const rootDir = await makeProject();
+    const keepNames = Array.from({ length: 8 }, (_, i) => `Keep${i}`);
+    for (const name of keepNames) {
+      await writeFile(join(rootDir, `${name}.js`), 'x', 'utf8');
+    }
+    const client = fakeClient({
+      getContent: vi.fn(async () => [
+        { name: 'appsscript', type: 'JSON' as const, source: MANIFEST },
+        { name: 'Code', type: 'SERVER_JS' as const, source: 'function main() {}' },
+        ...keepNames.map((name) => ({ name, type: 'SERVER_JS' as const, source: 'x' })),
+        { name: 'Gone1', type: 'SERVER_JS' as const, source: 'y' },
+        { name: 'Gone2', type: 'SERVER_JS' as const, source: 'z' },
+      ]),
+    });
+
+    const result = await deploy(client, baseOptions(rootDir));
+
+    expect(result.diff.deleted).toEqual(['Gone1', 'Gone2']);
+    expect(client.updateContent).toHaveBeenCalled();
   });
 
   it('does not warn when only a small share of files is deleted', async () => {

@@ -9,7 +9,8 @@ import { GasDeployError } from './errors.js';
  * 共通の設定であり、config には現れない（呼び出し元の action 入力に由来する）ため、
  * `deploy()` に渡す前にこれらを合成する必要がある。この型がその合成後の形。
  */
-export type DeployTarget = ResolvedTarget & Pick<DeployOptions, 'dryRun' | 'createVersion' | 'description'>;
+export type DeployTarget = ResolvedTarget &
+  Pick<DeployOptions, 'dryRun' | 'createVersion' | 'description' | 'allowDelete'>;
 
 export interface ProjectDeployResult {
   project: string;
@@ -35,6 +36,7 @@ function toDeployOptions(target: DeployTarget): DeployOptions {
     createVersion: target.createVersion,
     description: target.description,
   };
+  if (target.allowDelete !== undefined) options.allowDelete = target.allowDelete;
   if (target.deploymentId !== undefined) options.deploymentId = target.deploymentId;
   if (target.projectType !== undefined) options.projectType = target.projectType;
   return options;

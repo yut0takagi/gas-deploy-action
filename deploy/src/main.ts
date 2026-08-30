@@ -155,6 +155,7 @@ export interface GlobalDeployOptions {
   dryRun: boolean;
   createVersion: boolean;
   description: string;
+  allowDelete: boolean;
 }
 
 /**
@@ -175,6 +176,7 @@ export async function buildDeployTargets(
       dryRun: options.dryRun,
       createVersion: options.createVersion,
       description: options.description,
+      allowDelete: options.allowDelete,
     });
   }
   return result;
@@ -348,6 +350,7 @@ async function runSingleProject(scriptId: string): Promise<void> {
   const projectType = parseProjectType(core.getInput('project-type') || 'standalone');
   const dryRun = parseBooleanInput('dry-run');
   const createVersion = parseBooleanInput('create-version');
+  const allowDelete = parseBooleanInput('allow-delete');
   const commentOnPr = parseBooleanInput('comment-on-pr');
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput('ignore'));
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -377,6 +380,7 @@ async function runSingleProject(scriptId: string): Promise<void> {
     projectType,
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description,
   });
 
@@ -427,6 +431,7 @@ async function runMultiProject(): Promise<void> {
 
   const dryRun = parseBooleanInput('dry-run');
   const createVersion = parseBooleanInput('create-version');
+  const allowDelete = parseBooleanInput('allow-delete');
   const commentOnPr = parseBooleanInput('comment-on-pr');
   const descriptionInput = core.getInput('description');
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -438,6 +443,7 @@ async function runMultiProject(): Promise<void> {
     ignoreInput: core.getInput('ignore'),
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description,
   });
 

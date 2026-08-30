@@ -29605,6 +29605,9 @@ var DEPLOYMENT_LIMIT = 20;
 var DEPLOYMENT_COUNT_WARN_THRESHOLD = 18;
 var MASS_DELETION_RATIO = 0.5;
 var MASS_DELETION_MIN_FILES = 2;
+function isMassDeletion(deletedCount, remoteCount) {
+  return deletedCount >= MASS_DELETION_MIN_FILES && deletedCount >= Math.ceil(remoteCount * MASS_DELETION_RATIO);
+}
 var URL_CHANGE_WARNING = "deployment-id \u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3001Web \u30A2\u30D7\u30EA\u306E URL \u304C\u5909\u308F\u308A\u307E\u3059\u3002\u65E2\u5B58\u306E URL \u3092\u7DAD\u6301\u3059\u308B\u306B\u306F deployment-id \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044";
 async function deploy(client, options) {
   const warnings = [];
@@ -29618,14 +29621,29 @@ async function deploy(client, options) {
   if (needsStableUrl && !options.deploymentId) {
     warnings.push(URL_CHANGE_WARNING);
   }
-  const isMassDeletion = diff.deleted.length >= MASS_DELETION_MIN_FILES && diff.deleted.length >= Math.ceil(remote.length * MASS_DELETION_RATIO);
-  if (isMassDeletion) {
+  const massDeletion = isMassDeletion(diff.deleted.length, remote.length);
+  if (massDeletion) {
     warnings.push(
-      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u307E\u3059\u3002root-dir \u306E\u6307\u5B9A\u3084\u30D3\u30EB\u30C9\u7D50\u679C\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
+      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u307E\u3059: ${diff.deleted.join(", ")}`
     );
   }
   if (options.dryRun) {
     return { changed: true, diff, warnings };
+  }
+  if (massDeletion && options.allowDelete !== true) {
+    throw new GasDeployError(
+      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u308B\u305F\u3081\u3001\u30C7\u30D7\u30ED\u30A4\u3092\u4E2D\u6B62\u3057\u307E\u3057\u305F`,
+      {
+        nextSteps: [
+          `\u524A\u9664\u3055\u308C\u308B\u30D5\u30A1\u30A4\u30EB: ${diff.deleted.join(", ")}`,
+          "root-dir \u306E\u6307\u5B9A\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u8AA4\u3063\u305F\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u6307\u3059\u3068\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u304C\u307B\u307C\u3059\u3079\u3066\u524A\u9664\u3055\u308C\u307E\u3059\uFF09",
+          "\u30D3\u30EB\u30C9\u3092\u4F34\u3046\u69CB\u6210\u3067\u306F\u3001\u30D3\u30EB\u30C9\u304C\u6210\u529F\u3057\u3066\u51FA\u529B\u304C\u63C3\u3063\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+          ".claspignore \u3067\u610F\u56F3\u305B\u305A\u9664\u5916\u3055\u308C\u3066\u3044\u308B\u30D5\u30A1\u30A4\u30EB\u304C\u7121\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+          "\u3053\u306E\u524A\u9664\u304C\u610F\u56F3\u3057\u305F\u3082\u306E\u3067\u3042\u308C\u3070 allow-delete: true \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
+          "dry-run: true \u3067\u5B9F\u884C\u3059\u308B\u3068\u3001\u66F8\u304D\u8FBC\u307E\u305A\u306B\u524A\u9664\u5185\u5BB9\u3060\u3051\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059"
+        ]
+      }
+    );
   }
   let previousVersionNumber;
   if (options.createVersion && options.deploymentId !== void 0) {
@@ -29955,6 +29973,7 @@ function toDeployOptions(target) {
     createVersion: target.createVersion,
     description: target.description
   };
+  if (target.allowDelete !== void 0) options.allowDelete = target.allowDelete;
   if (target.deploymentId !== void 0) options.deploymentId = target.deploymentId;
   if (target.projectType !== void 0) options.projectType = target.projectType;
   return options;
@@ -30251,15 +30270,28 @@ function section(title, items) {
   if (items.length === 0) return [];
   return [`### ${title} (${items.length})`, "", ...items.map((item) => `- \`${item}\``), ""];
 }
+function deletionNotice(deleted) {
+  if (deleted.length === 0) return [];
+  return [
+    `> [!WARNING]`,
+    `> **\u4EE5\u4E0B\u306E ${deleted.length} \u30D5\u30A1\u30A4\u30EB\u304C\u30EA\u30E2\u30FC\u30C8\u304B\u3089\u524A\u9664\u3055\u308C\u307E\u3059**`,
+    ">",
+    ...deleted.map((name) => `> - \`${name}\``),
+    ""
+  ];
+}
 function renderSummary(result) {
   const lines = ["## GAS \u30C7\u30D7\u30ED\u30A4\u7D50\u679C", ""];
   if (!result.changed) {
     lines.push("\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
   } else {
     lines.push(
+      ...deletionNotice(result.diff.deleted),
       ...section("\u8FFD\u52A0", result.diff.added),
       ...section("\u5909\u66F4", result.diff.modified),
-      ...section("\u524A\u9664", result.diff.deleted)
+      ...section("\u524A\u9664", result.diff.deleted),
+      `\u8FFD\u52A0: ${result.diff.added.length} / \u5909\u66F4: ${result.diff.modified.length} / \u524A\u9664: ${result.diff.deleted.length}`,
+      ""
     );
   }
   const facts = [];
@@ -30280,6 +30312,9 @@ function renderMultiSummary(result, targets) {
   for (const entry of result.completed) {
     lines.push(`### ${entry.project} (${entry.environment})`, "");
     lines.push(entry.result.changed ? "\u5909\u66F4\u3042\u308A" : "\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
+    if (entry.result.changed) {
+      lines.push(...deletionNotice(entry.result.diff.deleted));
+    }
     const facts = [];
     if (entry.result.versionNumber !== void 0) facts.push(`- \u30D0\u30FC\u30B8\u30E7\u30F3: \`${entry.result.versionNumber}\``);
     if (entry.result.previousVersionNumber !== void 0) {
@@ -30407,7 +30442,8 @@ async function buildDeployTargets(targets, options) {
       ignore,
       dryRun: options.dryRun,
       createVersion: options.createVersion,
-      description: options.description
+      description: options.description,
+      allowDelete: options.allowDelete
     });
   }
   return result;
@@ -30509,6 +30545,7 @@ async function runSingleProject(scriptId) {
   const projectType = parseProjectType(core.getInput("project-type") || "standalone");
   const dryRun = parseBooleanInput("dry-run");
   const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput("ignore"));
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -30532,6 +30569,7 @@ async function runSingleProject(scriptId) {
     projectType,
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description
   });
   for (const warning2 of result.warnings) {
@@ -30570,6 +30608,7 @@ async function runMultiProject() {
   const targets = resolveTargets(config, { environment, projects, env: process.env });
   const dryRun = parseBooleanInput("dry-run");
   const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const descriptionInput = core.getInput("description");
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -30581,6 +30620,7 @@ async function runMultiProject() {
     ignoreInput: core.getInput("ignore"),
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description
   });
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
