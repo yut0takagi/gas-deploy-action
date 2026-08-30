@@ -13,5 +13,6 @@ export * from './config.js';
 export * from './multi-deployer.js';
 export * from './rollback.js';
 export * from './token-health.js';
+export * from './preflight.js';
 export * from './provenance.js';
 export * from './status.js';

@@ -27334,11 +27334,12 @@ var SCOPE_NEXT_STEPS = [
   "clasp login \u3067\u767A\u884C\u3057\u305F\u8A8D\u8A3C\u60C5\u5831\u306B\u306F\u3053\u306E2\u3064\u304C\u542B\u307E\u308C\u307E\u3059",
   "\u81EA\u524D\u306E OAuth \u30AF\u30E9\u30A4\u30A2\u30F3\u30C8\u3092\u4F7F\u3046\u5834\u5408\u306F\u3001\u540C\u610F\u753B\u9762\u306B\u3053\u306E2\u3064\u306E\u30B9\u30B3\u30FC\u30D7\u3092\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
-var REQUESTED_SCOPES = [
+var REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/script.projects",
   "https://www.googleapis.com/auth/script.deployments"
-].join(" ");
-async function getAccessToken(credentials, fetchImpl = fetch) {
+];
+var REQUESTED_SCOPES = REQUIRED_SCOPES.join(" ");
+async function exchangeToken(credentials, fetchImpl = fetch) {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
@@ -27422,7 +27423,12 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
       nextSteps: EXPIRY_NEXT_STEPS
     });
   }
-  return accessToken;
+  const rawScope = parsed.scope;
+  const grantedScopes = typeof rawScope === "string" ? rawScope.split(" ").filter((s) => s.length > 0) : [];
+  return { accessToken, grantedScopes };
+}
+async function getAccessToken(credentials, fetchImpl = fetch) {
+  return (await exchangeToken(credentials, fetchImpl)).accessToken;
 }
 
 // packages/core/src/ignore.ts
@@ -27554,6 +27560,16 @@ var AppsScriptClient = class {
       }
     }
     throw lastError ?? new GasDeployError("Apps Script API \u3078\u306E\u30EA\u30AF\u30A8\u30B9\u30C8\u304C\u5931\u6557\u3057\u307E\u3057\u305F");
+  }
+  /**
+   * プロジェクトのメタデータだけを読む。存在と閲覧権限の確認に使う。
+   *
+   * `getContent` ではなくこちらを使うのは、スクリプトのソース全体を落とさずに済むため。
+   * デプロイ前の権限確認を全プロジェクト分まとめて行うのが用途で、そこで `/content` を
+   * 叩くと、直後の `deploy` が同じものをもう一度取得することになる。
+   */
+  async getProject(scriptId) {
+    await this.request("GET", `/projects/${encodePathSegment(scriptId)}`);
   }
   async getContent(scriptId) {
     const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content`);

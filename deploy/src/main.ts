@@ -8,10 +8,10 @@ import {
   buildVersionDescription,
   deploy,
   deployAll,
-  getAccessToken,
   parseClaspIgnore,
   parseConfig,
   parseCredentials,
+  preflight,
   readConfigFile,
   resolveTargets,
   type DeployTarget,
@@ -340,7 +340,7 @@ export async function run(): Promise<void> {
 }
 
 async function runSingleProject(scriptId: string): Promise<void> {
-  // ネットワーク呼び出し（getAccessToken / deploy）の前に、ローカルで検証できる入力を
+  // ネットワーク呼び出し（preflight / deploy）の前に、ローカルで検証できる入力を
   // すべて読み切って失敗させる。
   const rootDir = core.getInput('root-dir') || '.';
   const deploymentId = core.getInput('deployment-id');
@@ -360,8 +360,14 @@ async function runSingleProject(scriptId: string): Promise<void> {
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
 
-  const accessToken = await getAccessToken(credentials);
+  // 単一プロジェクトでは scriptIds を渡さない。deploy() が書き込みの前に必ず
+  // getContent を呼ぶため、ここで projects.get を足しても得られる情報は同じで、
+  // リクエストが1つ増えるだけになる。スコープの検証だけを先に済ませる。
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds: [] });
   core.setSecret(accessToken);
+  for (const warning of preflightWarnings) {
+    core.warning(warning);
+  }
 
   const result = await deploy(new AppsScriptClient(accessToken), {
     scriptId,
@@ -439,8 +445,16 @@ async function runMultiProject(): Promise<void> {
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
 
-  const accessToken = await getAccessToken(credentials);
+  // 逐次デプロイなので、3件目で権限切れに気づくと1・2件目は既に置き換わった後になる。
+  // 対象全件の読み取り権限をここでまとめて確認し、1件でも欠ければ何も書かずに止める。
+  // 同じプロジェクトを複数の対象が指す構成がありうるため、重複は除いてから渡す。
+  const scriptIds = [...new Set(targets.map((target) => target.scriptId))];
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds });
   core.setSecret(accessToken);
+  for (const warning of preflightWarnings) {
+    core.warning(warning);
+  }
+  core.info(`デプロイ前の確認: ${scriptIds.length} 件のプロジェクトの読み取り権限を確認しました`);
 
   const client = new AppsScriptClient(accessToken);
   const multiResult = await deployAll(client, deployTargets);

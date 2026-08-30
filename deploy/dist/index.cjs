@@ -29101,11 +29101,12 @@ var SCOPE_NEXT_STEPS = [
   "clasp login \u3067\u767A\u884C\u3057\u305F\u8A8D\u8A3C\u60C5\u5831\u306B\u306F\u3053\u306E2\u3064\u304C\u542B\u307E\u308C\u307E\u3059",
   "\u81EA\u524D\u306E OAuth \u30AF\u30E9\u30A4\u30A2\u30F3\u30C8\u3092\u4F7F\u3046\u5834\u5408\u306F\u3001\u540C\u610F\u753B\u9762\u306B\u3053\u306E2\u3064\u306E\u30B9\u30B3\u30FC\u30D7\u3092\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
-var REQUESTED_SCOPES = [
+var REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/script.projects",
   "https://www.googleapis.com/auth/script.deployments"
-].join(" ");
-async function getAccessToken(credentials, fetchImpl = fetch) {
+];
+var REQUESTED_SCOPES = REQUIRED_SCOPES.join(" ");
+async function exchangeToken(credentials, fetchImpl = fetch) {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
@@ -29189,7 +29190,9 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
       nextSteps: EXPIRY_NEXT_STEPS
     });
   }
-  return accessToken;
+  const rawScope = parsed.scope;
+  const grantedScopes = typeof rawScope === "string" ? rawScope.split(" ").filter((s) => s.length > 0) : [];
+  return { accessToken, grantedScopes };
 }
 
 // packages/core/src/ignore.ts
@@ -29482,6 +29485,16 @@ var AppsScriptClient = class {
       }
     }
     throw lastError ?? new GasDeployError("Apps Script API \u3078\u306E\u30EA\u30AF\u30A8\u30B9\u30C8\u304C\u5931\u6557\u3057\u307E\u3057\u305F");
+  }
+  /**
+   * プロジェクトのメタデータだけを読む。存在と閲覧権限の確認に使う。
+   *
+   * `getContent` ではなくこちらを使うのは、スクリプトのソース全体を落とさずに済むため。
+   * デプロイ前の権限確認を全プロジェクト分まとめて行うのが用途で、そこで `/content` を
+   * 叩くと、直後の `deploy` が同じものをもう一度取得することになる。
+   */
+  async getProject(scriptId) {
+    await this.request("GET", `/projects/${encodePathSegment(scriptId)}`);
   }
   async getContent(scriptId) {
     const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content`);
@@ -29966,6 +29979,53 @@ async function deployAll(client, targets, deployImpl = deploy) {
     completed.push({ project: target.project, environment: target.environment, scriptId: target.scriptId, result });
   }
   return { changed: completed.some((entry) => entry.result.changed), completed };
+}
+
+// packages/core/src/preflight.ts
+var DEFAULT_DEPS = {
+  exchange: (credentials) => exchangeToken(credentials),
+  readProject: async (accessToken, scriptId) => {
+    await new AppsScriptClient(accessToken).getProject(scriptId);
+  }
+};
+function verifyScopes(grantedScopes) {
+  if (grantedScopes.length === 0) {
+    return [];
+  }
+  const missing = REQUIRED_SCOPES.filter((required) => !grantedScopes.includes(required));
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    `\u8A8D\u8A3C\u60C5\u5831\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30FC\u30D7\u304C\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u4E0D\u8DB3: ${missing.join(", ")}\uFF09\u3002\u30C7\u30D7\u30ED\u30A4\u304C 403 \u3067\u5931\u6557\u3059\u308B\u5834\u5408\u306F\u3001clasp login \u3092\u3084\u308A\u76F4\u3057\u3066\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3066\u304F\u3060\u3055\u3044`
+  ];
+}
+async function preflight(options, deps = {}) {
+  const { exchange, readProject } = { ...DEFAULT_DEPS, ...deps };
+  const { accessToken, grantedScopes } = await exchange(options.credentials);
+  const warnings = verifyScopes(grantedScopes);
+  const checkedScriptIds = [];
+  for (const scriptId of options.scriptIds) {
+    try {
+      await readProject(accessToken, scriptId);
+    } catch (cause) {
+      const detail = cause instanceof GasDeployError ? cause : void 0;
+      throw new GasDeployError(
+        `\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08scriptId: ${scriptId}\uFF09: ${detail?.message ?? (cause instanceof Error ? cause.message : String(cause))}`,
+        {
+          cause,
+          ...detail?.code !== void 0 ? { code: detail.code } : {},
+          ...detail?.status !== void 0 ? { status: detail.status } : {},
+          nextSteps: [
+            ...detail?.nextSteps ?? [],
+            "\u3053\u306E\u78BA\u8A8D\u306F\u8AAD\u307F\u53D6\u308A\u306E\u307F\u3067\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u307E\u3060\u66F8\u304D\u63DB\u3048\u3089\u308C\u3066\u3044\u307E\u305B\u3093"
+          ]
+        }
+      );
+    }
+    checkedScriptIds.push(scriptId);
+  }
+  return { accessToken, checkedScriptIds, warnings };
 }
 
 // packages/core/src/provenance.ts
@@ -30459,8 +30519,11 @@ async function runSingleProject(scriptId) {
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds: [] });
   core.setSecret(accessToken);
+  for (const warning2 of preflightWarnings) {
+    core.warning(warning2);
+  }
   const result = await deploy(new AppsScriptClient(accessToken), {
     scriptId,
     rootDir,
@@ -30523,8 +30586,13 @@ async function runMultiProject() {
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
+  const scriptIds = [...new Set(targets.map((target) => target.scriptId))];
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds });
   core.setSecret(accessToken);
+  for (const warning2 of preflightWarnings) {
+    core.warning(warning2);
+  }
+  core.info(`\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D: ${scriptIds.length} \u4EF6\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8AAD\u307F\u53D6\u308A\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F`);
   const client = new AppsScriptClient(accessToken);
   const multiResult = await deployAll(client, deployTargets);
   for (const entry of multiResult.completed) {

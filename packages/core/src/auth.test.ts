@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { REQUESTED_SCOPES, getAccessToken } from './auth.js';
+import { REQUESTED_SCOPES, REQUIRED_SCOPES, exchangeToken, getAccessToken } from './auth.js';
 import { GasDeployError } from './errors.js';
 
 const CREDENTIALS = {
@@ -219,6 +219,28 @@ describe('getAccessToken', () => {
       }
     })();
     expect(err!.nextSteps.join('\n')).not.toContain('7日');
+  });
+
+  // getAccessToken はアクセストークンしか返さない。付与スコープの検証には
+  // 応答の scope が要るため、そちらを落とさない交換関数を別に持つ。
+  describe('exchangeToken', () => {
+    it('reports the granted scopes alongside the token', async () => {
+      const fetchImpl = stubFetch(
+        200,
+        JSON.stringify({ access_token: 'at-123', scope: `${REQUESTED_SCOPES}` }),
+      );
+      const result = await exchangeToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+      expect(result.accessToken).toBe('at-123');
+      expect(result.grantedScopes).toEqual([...REQUIRED_SCOPES]);
+    });
+
+    // 応答に scope が無いことはありうる。空配列は「付与されていない」ではなく
+    // 「判定できない」を意味し、検証側はこれを不足として扱ってはならない。
+    it('returns an empty scope list when the response omits scope', async () => {
+      const fetchImpl = stubFetch(200, JSON.stringify({ access_token: 'at-123' }));
+      const result = await exchangeToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+      expect(result.grantedScopes).toEqual([]);
+    });
   });
 
   // 死活監視は「失効したのか、スコープが足りないのか、そもそも繋がらないのか」で

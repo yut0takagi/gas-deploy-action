@@ -172,6 +172,17 @@ export class AppsScriptClient {
     throw lastError ?? new GasDeployError('Apps Script API へのリクエストが失敗しました');
   }
 
+  /**
+   * プロジェクトのメタデータだけを読む。存在と閲覧権限の確認に使う。
+   *
+   * `getContent` ではなくこちらを使うのは、スクリプトのソース全体を落とさずに済むため。
+   * デプロイ前の権限確認を全プロジェクト分まとめて行うのが用途で、そこで `/content` を
+   * 叩くと、直後の `deploy` が同じものをもう一度取得することになる。
+   */
+  async getProject(scriptId: string): Promise<void> {
+    await this.request('GET', `/projects/${encodePathSegment(scriptId)}`);
+  }
+
   async getContent(scriptId: string): Promise<ScriptFile[]> {
     const result = (await this.request('GET', `/projects/${encodePathSegment(scriptId)}/content`)) as {
       files?: ScriptFile[];

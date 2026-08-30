@@ -52,19 +52,34 @@ const SCOPE_NEXT_STEPS = [
  * この2つで getContent / updateContent / versions.create / deployments.create の
  * すべてが動作することは実測で確認済み。
  */
-export const REQUESTED_SCOPES = [
+export const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/script.projects',
   'https://www.googleapis.com/auth/script.deployments',
-].join(' ');
+] as const;
+
+export const REQUESTED_SCOPES = REQUIRED_SCOPES.join(' ');
+
+export interface TokenExchange {
+  accessToken: string;
+  /**
+   * 実際に付与されたスコープ。
+   *
+   * 要求どおりに絞り込まれた保証は無い。リフレッシュトークンに元々含まれていない
+   * スコープは要求しても付かず、その場合でもトークン交換自体は 200 で成功する
+   * （不足に気づくのは API を叩いた後の 403 になる）。応答に `scope` が無いことも
+   * ありうるため、空配列は「付与されていない」ではなく「判定できない」を意味する。
+   */
+  grantedScopes: string[];
+}
 
 /**
  * refresh token を access token に交換する。
  * credentials に access token が含まれていても使わず、常に新規取得する。
  */
-export async function getAccessToken(
+export async function exchangeToken(
   credentials: Credentials,
   fetchImpl: typeof fetch = fetch,
-): Promise<string> {
+): Promise<TokenExchange> {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
@@ -174,5 +189,18 @@ export async function getAccessToken(
     });
   }
 
-  return accessToken;
+  // scope はスペース区切りの文字列で返る（RFC 6749 §5.1）。省略されることもあるため、
+  // 無い場合は空配列にする。判定側が「無い＝不足」と読まないよう注意すること。
+  const rawScope = (parsed as { scope?: unknown }).scope;
+  const grantedScopes = typeof rawScope === 'string' ? rawScope.split(' ').filter((s) => s.length > 0) : [];
+
+  return { accessToken, grantedScopes };
+}
+
+/** 付与スコープを必要としない呼び出し向けの薄いラッパ。 */
+export async function getAccessToken(
+  credentials: Credentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  return (await exchangeToken(credentials, fetchImpl)).accessToken;
 }
