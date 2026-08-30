@@ -1,10 +1,10 @@
 {
   "name": "@gas-deploy/rollback-action",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "dependencies": {
     "@actions/core": "^1.11.1",
-    "@gas-deploy/core": "0.1.0"
+    "@gas-deploy/core": "0.2.0"
   }
 }

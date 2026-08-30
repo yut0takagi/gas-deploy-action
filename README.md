@@ -25,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.2.0
         with:
           credentials: ${{ secrets.CLASPRC_JSON }}
           script-id: ${{ secrets.GAS_SCRIPT_ID }}
@@ -35,7 +35,10 @@ jobs:
 
 `root-dir` にはビルド済み JS（TypeScript ならトランスパイル後の出力先）を指定する。詳細は下記「制限事項」を参照。
 
-バージョンは `@v0.1.0` のように固定するか、`@v0` を指定してパッチリリースに追従させる。
+バージョンは `@v0.2.0` のように固定するか、`@v0` を指定して最新に追従させる。
+
+> [!WARNING]
+> **`@v0` は破壊的変更にも追従する。** 1.0 未満のため、マイナーバージョンの更新で互換性が壊れることがある（実際に v0.2.0 で `allow-delete` の既定が変わっている）。本番のワークフローでは `@v0.2.0` のようにバージョンを固定し、更新はリリースノートを読んでから行うことを推奨する。
 
 ## セットアップ
 
@@ -167,7 +170,7 @@ projects:
 ```
 
 ```yaml
-      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.2.0
         with:
           credentials: ${{ secrets.CLASPRC_JSON }}
           environment: prod
@@ -241,7 +244,7 @@ projects:
 意図的な一括整理のときは `allow-delete: true` を指定する。
 
 ```yaml
-      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.2.0
         with:
           credentials: ${{ secrets.CLASPRC_JSON }}
           script-id: ${{ secrets.GAS_SCRIPT_ID }}
@@ -315,7 +318,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: yut0takagi/gas-deploy-action/deploy@v0.1.0
+      - uses: yut0takagi/gas-deploy-action/deploy@v0.2.0
         with:
           credentials: ${{ secrets.CLASPRC_JSON }}
           environment: prod
@@ -344,7 +347,7 @@ push で走るワークフローに `comment-on-pr: true` が付いたままで�
 `rollback` は別のアクションとして提供する。デプロイが指すバージョン番号を差し替えるだけの操作で、ファイルの書き込みもバージョンの作成も行わない。バージョンは Apps Script 側に永続する（削除する API が存在しない）ため、過去のバージョンはいつでも指し直せる。
 
 ```yaml
-- uses: yut0takagi/gas-deploy-action/rollback@v0.1.0
+- uses: yut0takagi/gas-deploy-action/rollback@v0.2.0
   with:
     credentials: ${{ secrets.CLASPRC_JSON }}
     environment: prod
@@ -354,7 +357,7 @@ push で走るワークフローに `comment-on-pr: true` が付いたままで�
 `version-number` を省略すると、**現在のバージョンの1つ前**に戻す。特定のバージョンを指定することもできる。
 
 ```yaml
-- uses: yut0takagi/gas-deploy-action/rollback@v0.1.0
+- uses: yut0takagi/gas-deploy-action/rollback@v0.2.0
   with:
     credentials: ${{ secrets.CLASPRC_JSON }}
     script-id: ${{ secrets.PROD_SCRIPT_ID }}

@@ -1,9 +1,9 @@
 {
   "name": "@gas-deploy/setup-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@gas-deploy/core": "0.1.0"
+    "@gas-deploy/core": "0.2.0"
   }
 }
