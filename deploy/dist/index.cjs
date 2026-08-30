@@ -29080,6 +29080,12 @@ var EXPIRY_NEXT_STEPS = [
   "\u30C7\u30D7\u30ED\u30A4\u306B\u4F7F\u3046\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3001GitHub Secrets \u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
+var REAUTH_NEXT_STEPS = [
+  "\u30ED\u30FC\u30AB\u30EB\u3067 `clasp login` \u3092\u3084\u308A\u76F4\u3057\u3001\u30B7\u30FC\u30AF\u30EC\u30C3\u30C8\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044: gh secret set CLASPRC_JSON < ~/.clasprc.json",
+  "\u3053\u306E\u5931\u52B9\u306F OAuth \u540C\u610F\u753B\u9762\u306E\u30B9\u30C6\u30FC\u30BF\u30B9\uFF08\u30C6\u30B9\u30C8 / \u672C\u756A / \u5185\u90E8\uFF09\u3068\u306F\u7121\u95A2\u4FC2\u306B\u767A\u751F\u3057\u307E\u3059\u3002\u540C\u610F\u753B\u9762\u306E\u5909\u66F4\u3067\u306F\u89E3\u6C7A\u3057\u307E\u305B\u3093",
+  "\u6052\u4E45\u7684\u306B\u56DE\u907F\u3059\u308B\u306B\u306F\u3001Workspace \u30A2\u30AB\u30A6\u30F3\u30C8\u3067\u306F\u306A\u304F\u500B\u4EBA Google \u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u8A8D\u8A3C\u60C5\u5831\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+  "Workspace \u3067\u904B\u7528\u3092\u7D9A\u3051\u308B\u5834\u5408\u306F\u3001\u7BA1\u7406\u30B3\u30F3\u30BD\u30FC\u30EB\u306E\u518D\u8A8D\u8A3C\u30DD\u30EA\u30B7\u30FC\u306E\u5BFE\u8C61\u304B\u3089\u5916\u308C\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044"
+];
 var CONNECTIVITY_NEXT_STEPS = [
   "\u30E9\u30F3\u30CA\u30FC\u304B\u3089\u30A4\u30F3\u30BF\u30FC\u30CD\u30C3\u30C8\u306B\u5230\u9054\u3067\u304D\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u30D7\u30ED\u30AD\u30B7\u3084\u30D5\u30A1\u30A4\u30A2\u30A6\u30A9\u30FC\u30EB\u3067 oauth2.googleapis.com \u304C\u906E\u65AD\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -29133,22 +29139,39 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   }
   if (!response.ok) {
     let oauthError;
+    let oauthErrorDescription;
     try {
       const parsedError = JSON.parse(text);
       if (typeof parsedError.error === "string") {
         oauthError = parsedError.error;
       }
+      if (typeof parsedError.error_description === "string") {
+        oauthErrorDescription = parsedError.error_description;
+      }
     } catch {
     }
-    const isScopeProblem = oauthError === "invalid_scope";
-    throw new GasDeployError(
-      isScopeProblem ? `\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})` : `\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`,
-      {
+    if (oauthError === "invalid_scope") {
+      throw new GasDeployError(`\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})`, {
         cause: text,
-        code: isScopeProblem ? "insufficient-scope" : "token-invalid",
-        nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS
-      }
-    );
+        code: "insufficient-scope",
+        nextSteps: SCOPE_NEXT_STEPS
+      });
+    }
+    if (oauthError === "invalid_grant" && oauthErrorDescription?.includes("invalid_rapt")) {
+      throw new GasDeployError(
+        `\u8A8D\u8A3C\u60C5\u5831\u304C\u5931\u52B9\u3057\u3066\u3044\u307E\u3059\uFF08Google Workspace \u306E\u518D\u8A8D\u8A3C\u30DD\u30EA\u30B7\u30FC\uFF09 (${response.status})`,
+        {
+          cause: text,
+          code: "reauth-required",
+          nextSteps: REAUTH_NEXT_STEPS
+        }
+      );
+    }
+    throw new GasDeployError(`\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`, {
+      cause: text,
+      code: "token-invalid",
+      nextSteps: EXPIRY_NEXT_STEPS
+    });
   }
   let parsed;
   try {

@@ -198,7 +198,27 @@ describe('getAccessToken', () => {
       }
     })();
     expect(err).toBeInstanceOf(GasDeployError);
-    expect(err!.nextSteps.join('\n')).toContain('再認証');
+    expect(err!.message).toContain('再認証ポリシー');
+    expect(err!.nextSteps.join('\n')).toContain('clasp login');
+    expect(err!.nextSteps.join('\n')).toContain('gh secret set');
+  });
+
+  // 汎用の案内は「同意画面をテストから本番へ」を先頭に出す。この失効は同意画面の
+  // ステータスと無関係に起きるため、それを混ぜると直らない対処に誘導することになる。
+  it('does not blame the consent screen when the cause is the reauth policy', async () => {
+    const fetchImpl = stubFetch(
+      400,
+      JSON.stringify({ error: 'invalid_grant', error_description: 'reauth related error (invalid_rapt)' }),
+    );
+    const err = await (async () => {
+      try {
+        await getAccessToken(CREDENTIALS, fetchImpl as unknown as typeof fetch);
+        return undefined;
+      } catch (e) {
+        return e as GasDeployError;
+      }
+    })();
+    expect(err!.nextSteps.join('\n')).not.toContain('7日');
   });
 
   // 死活監視は「失効したのか、スコープが足りないのか、そもそも繋がらないのか」で
@@ -216,6 +236,18 @@ describe('getAccessToken', () => {
     it('tags an expired or revoked refresh token as token-invalid', async () => {
       const err = await capture(stubFetch(400, JSON.stringify({ error: 'invalid_grant' })) as unknown as typeof fetch);
       expect(err.code).toBe('token-invalid');
+    });
+
+    // 同じ invalid_grant でも、再認証ポリシーによる失効だけは対処が異なる。
+    // error_description まで見て初めて区別できるため、コードで分けておく。
+    it('tags a reauth-policy expiry as reauth-required, not token-invalid', async () => {
+      const err = await capture(
+        stubFetch(
+          400,
+          JSON.stringify({ error: 'invalid_grant', error_description: 'reauth related error (invalid_rapt)' }),
+        ) as unknown as typeof fetch,
+      );
+      expect(err.code).toBe('reauth-required');
     });
 
     it('tags a scope mismatch as insufficient-scope', async () => {

@@ -9,6 +9,7 @@ export type GasErrorCode =
   | 'connectivity'
   | 'insufficient-scope'
   | 'token-invalid'
+  | 'reauth-required'
   | 'response-invalid'
   | 'unauthorized'
   | 'api-disabled'
