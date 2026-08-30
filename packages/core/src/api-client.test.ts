@@ -42,6 +42,24 @@ describe('AppsScriptClient.getContent', () => {
   });
 });
 
+describe('AppsScriptClient.getProject', () => {
+  // /content ではなくメタデータの側を叩くのが要点。デプロイ前の権限確認で
+  // /content を使うと、直後の deploy が同じソースをもう一度落とすことになる。
+  it('reads the project metadata endpoint, not the content endpoint', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 200, body: JSON.stringify({ scriptId: SCRIPT_ID }) }]);
+    await client.getProject(SCRIPT_ID);
+
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://script.googleapis.com/v1/projects/script-abc');
+    expect(init.method).toBe('GET');
+  });
+
+  it('raises the classified error when access is denied', async () => {
+    const { client } = clientWith([{ status: 403, body: JSON.stringify({ error: { message: 'denied' } }) }]);
+    await expect(client.getProject(SCRIPT_ID)).rejects.toThrowError(GasDeployError);
+  });
+});
+
 describe('AppsScriptClient retry behaviour', () => {
   it('retries on 429 and succeeds', async () => {
     const { client, fetchImpl } = clientWith([

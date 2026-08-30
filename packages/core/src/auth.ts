@@ -11,6 +11,20 @@ const EXPIRY_NEXT_STEPS = [
   '認証情報を再発行し、GitHub Secrets を更新してください',
 ];
 
+/**
+ * Workspace の再認証ポリシーによる失効。
+ *
+ * `EXPIRY_NEXT_STEPS` と分けているのが要点である。汎用の案内は「同意画面を本番にする」を
+ * 先頭に置くが、この失効は同意画面のステータスと無関係に起きるため、それを試した利用者は
+ * 直らない対処に時間を使うことになる。原因が確定しているときは、確定した対処だけを出す。
+ */
+const REAUTH_NEXT_STEPS = [
+  'ローカルで `clasp login` をやり直し、シークレットを更新してください: gh secret set CLASPRC_JSON < ~/.clasprc.json',
+  'この失効は OAuth 同意画面のステータス（テスト / 本番 / 内部）とは無関係に発生します。同意画面の変更では解決しません',
+  '恒久的に回避するには、Workspace アカウントではなく個人 Google アカウントの認証情報を使ってください',
+  'Workspace で運用を続ける場合は、管理コンソールの再認証ポリシーの対象から外れたアカウントを使ってください',
+];
+
 const CONNECTIVITY_NEXT_STEPS = [
   'ランナーからインターネットに到達できるか確認してください',
   'プロキシやファイアウォールで oauth2.googleapis.com が遮断されていないか確認してください',
@@ -38,19 +52,34 @@ const SCOPE_NEXT_STEPS = [
  * この2つで getContent / updateContent / versions.create / deployments.create の
  * すべてが動作することは実測で確認済み。
  */
-export const REQUESTED_SCOPES = [
+export const REQUIRED_SCOPES = [
   'https://www.googleapis.com/auth/script.projects',
   'https://www.googleapis.com/auth/script.deployments',
-].join(' ');
+] as const;
+
+export const REQUESTED_SCOPES = REQUIRED_SCOPES.join(' ');
+
+export interface TokenExchange {
+  accessToken: string;
+  /**
+   * 実際に付与されたスコープ。
+   *
+   * 要求どおりに絞り込まれた保証は無い。リフレッシュトークンに元々含まれていない
+   * スコープは要求しても付かず、その場合でもトークン交換自体は 200 で成功する
+   * （不足に気づくのは API を叩いた後の 403 になる）。応答に `scope` が無いことも
+   * ありうるため、空配列は「付与されていない」ではなく「判定できない」を意味する。
+   */
+  grantedScopes: string[];
+}
 
 /**
  * refresh token を access token に交換する。
  * credentials に access token が含まれていても使わず、常に新規取得する。
  */
-export async function getAccessToken(
+export async function exchangeToken(
   credentials: Credentials,
   fetchImpl: typeof fetch = fetch,
-): Promise<string> {
+): Promise<TokenExchange> {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
@@ -92,26 +121,47 @@ export async function getAccessToken(
     // { "error": "...", "error_description": "..." } 形式で、送信した
     // client_secret や refresh_token をエコーバックしない。診断に有用なので cause に残す。
     let oauthError: string | undefined;
+    let oauthErrorDescription: string | undefined;
     try {
-      const parsedError = JSON.parse(text) as { error?: unknown };
+      const parsedError = JSON.parse(text) as { error?: unknown; error_description?: unknown };
       if (typeof parsedError.error === 'string') {
         oauthError = parsedError.error;
+      }
+      if (typeof parsedError.error_description === 'string') {
+        oauthErrorDescription = parsedError.error_description;
       }
     } catch {
       // 本文が JSON でない場合は判別を諦め、既定の案内にフォールバックする。
     }
 
-    const isScopeProblem = oauthError === 'invalid_scope';
-    throw new GasDeployError(
-      isScopeProblem
-        ? `要求したスコープが認証情報に付与されていません (${response.status})`
-        : `アクセストークンの取得に失敗しました (${response.status})`,
-      {
+    if (oauthError === 'invalid_scope') {
+      throw new GasDeployError(`要求したスコープが認証情報に付与されていません (${response.status})`, {
         cause: text,
-        code: isScopeProblem ? 'insufficient-scope' : 'token-invalid',
-        nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS,
-      },
-    );
+        code: 'insufficient-scope',
+        nextSteps: SCOPE_NEXT_STEPS,
+      });
+    }
+
+    // Google は再認証ポリシーによる失効を `invalid_grant` + error_description の
+    // `invalid_rapt` で返す。`invalid_grant` は失効・取り消し・クロックずれのいずれでも
+    // 返るため、error だけでは区別できず、description まで見て初めて原因が確定する。
+    // 確定したものは確定したものとして、汎用の案内から切り離して報告する。
+    if (oauthError === 'invalid_grant' && oauthErrorDescription?.includes('invalid_rapt')) {
+      throw new GasDeployError(
+        `認証情報が失効しています（Google Workspace の再認証ポリシー） (${response.status})`,
+        {
+          cause: text,
+          code: 'reauth-required',
+          nextSteps: REAUTH_NEXT_STEPS,
+        },
+      );
+    }
+
+    throw new GasDeployError(`アクセストークンの取得に失敗しました (${response.status})`, {
+      cause: text,
+      code: 'token-invalid',
+      nextSteps: EXPIRY_NEXT_STEPS,
+    });
   }
 
   let parsed: unknown;
@@ -139,5 +189,18 @@ export async function getAccessToken(
     });
   }
 
-  return accessToken;
+  // scope はスペース区切りの文字列で返る（RFC 6749 §5.1）。省略されることもあるため、
+  // 無い場合は空配列にする。判定側が「無い＝不足」と読まないよう注意すること。
+  const rawScope = (parsed as { scope?: unknown }).scope;
+  const grantedScopes = typeof rawScope === 'string' ? rawScope.split(' ').filter((s) => s.length > 0) : [];
+
+  return { accessToken, grantedScopes };
+}
+
+/** 付与スコープを必要としない呼び出し向けの薄いラッパ。 */
+export async function getAccessToken(
+  credentials: Credentials,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  return (await exchangeToken(credentials, fetchImpl)).accessToken;
 }

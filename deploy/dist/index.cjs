@@ -29080,6 +29080,12 @@ var EXPIRY_NEXT_STEPS = [
   "\u30C7\u30D7\u30ED\u30A4\u306B\u4F7F\u3046\u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u5909\u66F4\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3001GitHub Secrets \u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
+var REAUTH_NEXT_STEPS = [
+  "\u30ED\u30FC\u30AB\u30EB\u3067 `clasp login` \u3092\u3084\u308A\u76F4\u3057\u3001\u30B7\u30FC\u30AF\u30EC\u30C3\u30C8\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044: gh secret set CLASPRC_JSON < ~/.clasprc.json",
+  "\u3053\u306E\u5931\u52B9\u306F OAuth \u540C\u610F\u753B\u9762\u306E\u30B9\u30C6\u30FC\u30BF\u30B9\uFF08\u30C6\u30B9\u30C8 / \u672C\u756A / \u5185\u90E8\uFF09\u3068\u306F\u7121\u95A2\u4FC2\u306B\u767A\u751F\u3057\u307E\u3059\u3002\u540C\u610F\u753B\u9762\u306E\u5909\u66F4\u3067\u306F\u89E3\u6C7A\u3057\u307E\u305B\u3093",
+  "\u6052\u4E45\u7684\u306B\u56DE\u907F\u3059\u308B\u306B\u306F\u3001Workspace \u30A2\u30AB\u30A6\u30F3\u30C8\u3067\u306F\u306A\u304F\u500B\u4EBA Google \u30A2\u30AB\u30A6\u30F3\u30C8\u306E\u8A8D\u8A3C\u60C5\u5831\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+  "Workspace \u3067\u904B\u7528\u3092\u7D9A\u3051\u308B\u5834\u5408\u306F\u3001\u7BA1\u7406\u30B3\u30F3\u30BD\u30FC\u30EB\u306E\u518D\u8A8D\u8A3C\u30DD\u30EA\u30B7\u30FC\u306E\u5BFE\u8C61\u304B\u3089\u5916\u308C\u305F\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044"
+];
 var CONNECTIVITY_NEXT_STEPS = [
   "\u30E9\u30F3\u30CA\u30FC\u304B\u3089\u30A4\u30F3\u30BF\u30FC\u30CD\u30C3\u30C8\u306B\u5230\u9054\u3067\u304D\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u30D7\u30ED\u30AD\u30B7\u3084\u30D5\u30A1\u30A4\u30A2\u30A6\u30A9\u30FC\u30EB\u3067 oauth2.googleapis.com \u304C\u906E\u65AD\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
@@ -29095,11 +29101,12 @@ var SCOPE_NEXT_STEPS = [
   "clasp login \u3067\u767A\u884C\u3057\u305F\u8A8D\u8A3C\u60C5\u5831\u306B\u306F\u3053\u306E2\u3064\u304C\u542B\u307E\u308C\u307E\u3059",
   "\u81EA\u524D\u306E OAuth \u30AF\u30E9\u30A4\u30A2\u30F3\u30C8\u3092\u4F7F\u3046\u5834\u5408\u306F\u3001\u540C\u610F\u753B\u9762\u306B\u3053\u306E2\u3064\u306E\u30B9\u30B3\u30FC\u30D7\u3092\u8FFD\u52A0\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
-var REQUESTED_SCOPES = [
+var REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/script.projects",
   "https://www.googleapis.com/auth/script.deployments"
-].join(" ");
-async function getAccessToken(credentials, fetchImpl = fetch) {
+];
+var REQUESTED_SCOPES = REQUIRED_SCOPES.join(" ");
+async function exchangeToken(credentials, fetchImpl = fetch) {
   const body = new URLSearchParams({
     client_id: credentials.clientId,
     client_secret: credentials.clientSecret,
@@ -29133,22 +29140,39 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
   }
   if (!response.ok) {
     let oauthError;
+    let oauthErrorDescription;
     try {
       const parsedError = JSON.parse(text);
       if (typeof parsedError.error === "string") {
         oauthError = parsedError.error;
       }
+      if (typeof parsedError.error_description === "string") {
+        oauthErrorDescription = parsedError.error_description;
+      }
     } catch {
     }
-    const isScopeProblem = oauthError === "invalid_scope";
-    throw new GasDeployError(
-      isScopeProblem ? `\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})` : `\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`,
-      {
+    if (oauthError === "invalid_scope") {
+      throw new GasDeployError(`\u8981\u6C42\u3057\u305F\u30B9\u30B3\u30FC\u30D7\u304C\u8A8D\u8A3C\u60C5\u5831\u306B\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u307E\u305B\u3093 (${response.status})`, {
         cause: text,
-        code: isScopeProblem ? "insufficient-scope" : "token-invalid",
-        nextSteps: isScopeProblem ? SCOPE_NEXT_STEPS : EXPIRY_NEXT_STEPS
-      }
-    );
+        code: "insufficient-scope",
+        nextSteps: SCOPE_NEXT_STEPS
+      });
+    }
+    if (oauthError === "invalid_grant" && oauthErrorDescription?.includes("invalid_rapt")) {
+      throw new GasDeployError(
+        `\u8A8D\u8A3C\u60C5\u5831\u304C\u5931\u52B9\u3057\u3066\u3044\u307E\u3059\uFF08Google Workspace \u306E\u518D\u8A8D\u8A3C\u30DD\u30EA\u30B7\u30FC\uFF09 (${response.status})`,
+        {
+          cause: text,
+          code: "reauth-required",
+          nextSteps: REAUTH_NEXT_STEPS
+        }
+      );
+    }
+    throw new GasDeployError(`\u30A2\u30AF\u30BB\u30B9\u30C8\u30FC\u30AF\u30F3\u306E\u53D6\u5F97\u306B\u5931\u6557\u3057\u307E\u3057\u305F (${response.status})`, {
+      cause: text,
+      code: "token-invalid",
+      nextSteps: EXPIRY_NEXT_STEPS
+    });
   }
   let parsed;
   try {
@@ -29166,7 +29190,9 @@ async function getAccessToken(credentials, fetchImpl = fetch) {
       nextSteps: EXPIRY_NEXT_STEPS
     });
   }
-  return accessToken;
+  const rawScope = parsed.scope;
+  const grantedScopes = typeof rawScope === "string" ? rawScope.split(" ").filter((s) => s.length > 0) : [];
+  return { accessToken, grantedScopes };
 }
 
 // packages/core/src/ignore.ts
@@ -29460,6 +29486,16 @@ var AppsScriptClient = class {
     }
     throw lastError ?? new GasDeployError("Apps Script API \u3078\u306E\u30EA\u30AF\u30A8\u30B9\u30C8\u304C\u5931\u6557\u3057\u307E\u3057\u305F");
   }
+  /**
+   * プロジェクトのメタデータだけを読む。存在と閲覧権限の確認に使う。
+   *
+   * `getContent` ではなくこちらを使うのは、スクリプトのソース全体を落とさずに済むため。
+   * デプロイ前の権限確認を全プロジェクト分まとめて行うのが用途で、そこで `/content` を
+   * 叩くと、直後の `deploy` が同じものをもう一度取得することになる。
+   */
+  async getProject(scriptId) {
+    await this.request("GET", `/projects/${encodePathSegment(scriptId)}`);
+  }
   async getContent(scriptId) {
     const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content`);
     return result.files ?? [];
@@ -29569,6 +29605,9 @@ var DEPLOYMENT_LIMIT = 20;
 var DEPLOYMENT_COUNT_WARN_THRESHOLD = 18;
 var MASS_DELETION_RATIO = 0.5;
 var MASS_DELETION_MIN_FILES = 2;
+function isMassDeletion(deletedCount, remoteCount) {
+  return deletedCount >= MASS_DELETION_MIN_FILES && deletedCount >= Math.ceil(remoteCount * MASS_DELETION_RATIO);
+}
 var URL_CHANGE_WARNING = "deployment-id \u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3001Web \u30A2\u30D7\u30EA\u306E URL \u304C\u5909\u308F\u308A\u307E\u3059\u3002\u65E2\u5B58\u306E URL \u3092\u7DAD\u6301\u3059\u308B\u306B\u306F deployment-id \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044";
 async function deploy(client, options) {
   const warnings = [];
@@ -29582,14 +29621,29 @@ async function deploy(client, options) {
   if (needsStableUrl && !options.deploymentId) {
     warnings.push(URL_CHANGE_WARNING);
   }
-  const isMassDeletion = diff.deleted.length >= MASS_DELETION_MIN_FILES && diff.deleted.length >= Math.ceil(remote.length * MASS_DELETION_RATIO);
-  if (isMassDeletion) {
+  const massDeletion = isMassDeletion(diff.deleted.length, remote.length);
+  if (massDeletion) {
     warnings.push(
-      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u307E\u3059\u3002root-dir \u306E\u6307\u5B9A\u3084\u30D3\u30EB\u30C9\u7D50\u679C\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`
+      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u307E\u3059: ${diff.deleted.join(", ")}`
     );
   }
   if (options.dryRun) {
     return { changed: true, diff, warnings };
+  }
+  if (massDeletion && options.allowDelete !== true) {
+    throw new GasDeployError(
+      `\u30EA\u30E2\u30FC\u30C8\u306E ${remote.length} \u4EF6\u306E\u3046\u3061 ${diff.deleted.length} \u4EF6\u304C\u524A\u9664\u3055\u308C\u308B\u305F\u3081\u3001\u30C7\u30D7\u30ED\u30A4\u3092\u4E2D\u6B62\u3057\u307E\u3057\u305F`,
+      {
+        nextSteps: [
+          `\u524A\u9664\u3055\u308C\u308B\u30D5\u30A1\u30A4\u30EB: ${diff.deleted.join(", ")}`,
+          "root-dir \u306E\u6307\u5B9A\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u8AA4\u3063\u305F\u30C7\u30A3\u30EC\u30AF\u30C8\u30EA\u3092\u6307\u3059\u3068\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u304C\u307B\u307C\u3059\u3079\u3066\u524A\u9664\u3055\u308C\u307E\u3059\uFF09",
+          "\u30D3\u30EB\u30C9\u3092\u4F34\u3046\u69CB\u6210\u3067\u306F\u3001\u30D3\u30EB\u30C9\u304C\u6210\u529F\u3057\u3066\u51FA\u529B\u304C\u63C3\u3063\u3066\u3044\u308B\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+          ".claspignore \u3067\u610F\u56F3\u305B\u305A\u9664\u5916\u3055\u308C\u3066\u3044\u308B\u30D5\u30A1\u30A4\u30EB\u304C\u7121\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+          "\u3053\u306E\u524A\u9664\u304C\u610F\u56F3\u3057\u305F\u3082\u306E\u3067\u3042\u308C\u3070 allow-delete: true \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
+          "dry-run: true \u3067\u5B9F\u884C\u3059\u308B\u3068\u3001\u66F8\u304D\u8FBC\u307E\u305A\u306B\u524A\u9664\u5185\u5BB9\u3060\u3051\u3092\u78BA\u8A8D\u3067\u304D\u307E\u3059"
+        ]
+      }
+    );
   }
   let previousVersionNumber;
   if (options.createVersion && options.deploymentId !== void 0) {
@@ -29919,6 +29973,7 @@ function toDeployOptions(target) {
     createVersion: target.createVersion,
     description: target.description
   };
+  if (target.allowDelete !== void 0) options.allowDelete = target.allowDelete;
   if (target.deploymentId !== void 0) options.deploymentId = target.deploymentId;
   if (target.projectType !== void 0) options.projectType = target.projectType;
   return options;
@@ -29943,6 +29998,53 @@ async function deployAll(client, targets, deployImpl = deploy) {
     completed.push({ project: target.project, environment: target.environment, scriptId: target.scriptId, result });
   }
   return { changed: completed.some((entry) => entry.result.changed), completed };
+}
+
+// packages/core/src/preflight.ts
+var DEFAULT_DEPS = {
+  exchange: (credentials) => exchangeToken(credentials),
+  readProject: async (accessToken, scriptId) => {
+    await new AppsScriptClient(accessToken).getProject(scriptId);
+  }
+};
+function verifyScopes(grantedScopes) {
+  if (grantedScopes.length === 0) {
+    return [];
+  }
+  const missing = REQUIRED_SCOPES.filter((required) => !grantedScopes.includes(required));
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    `\u8A8D\u8A3C\u60C5\u5831\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30FC\u30D7\u304C\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u4E0D\u8DB3: ${missing.join(", ")}\uFF09\u3002\u30C7\u30D7\u30ED\u30A4\u304C 403 \u3067\u5931\u6557\u3059\u308B\u5834\u5408\u306F\u3001clasp login \u3092\u3084\u308A\u76F4\u3057\u3066\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3066\u304F\u3060\u3055\u3044`
+  ];
+}
+async function preflight(options, deps = {}) {
+  const { exchange, readProject } = { ...DEFAULT_DEPS, ...deps };
+  const { accessToken, grantedScopes } = await exchange(options.credentials);
+  const warnings = verifyScopes(grantedScopes);
+  const checkedScriptIds = [];
+  for (const scriptId of options.scriptIds) {
+    try {
+      await readProject(accessToken, scriptId);
+    } catch (cause) {
+      const detail = cause instanceof GasDeployError ? cause : void 0;
+      throw new GasDeployError(
+        `\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08scriptId: ${scriptId}\uFF09: ${detail?.message ?? (cause instanceof Error ? cause.message : String(cause))}`,
+        {
+          cause,
+          ...detail?.code !== void 0 ? { code: detail.code } : {},
+          ...detail?.status !== void 0 ? { status: detail.status } : {},
+          nextSteps: [
+            ...detail?.nextSteps ?? [],
+            "\u3053\u306E\u78BA\u8A8D\u306F\u8AAD\u307F\u53D6\u308A\u306E\u307F\u3067\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u307E\u3060\u66F8\u304D\u63DB\u3048\u3089\u308C\u3066\u3044\u307E\u305B\u3093"
+          ]
+        }
+      );
+    }
+    checkedScriptIds.push(scriptId);
+  }
+  return { accessToken, checkedScriptIds, warnings };
 }
 
 // packages/core/src/provenance.ts
@@ -30168,15 +30270,28 @@ function section(title, items) {
   if (items.length === 0) return [];
   return [`### ${title} (${items.length})`, "", ...items.map((item) => `- \`${item}\``), ""];
 }
+function deletionNotice(deleted) {
+  if (deleted.length === 0) return [];
+  return [
+    `> [!WARNING]`,
+    `> **\u4EE5\u4E0B\u306E ${deleted.length} \u30D5\u30A1\u30A4\u30EB\u304C\u30EA\u30E2\u30FC\u30C8\u304B\u3089\u524A\u9664\u3055\u308C\u307E\u3059**`,
+    ">",
+    ...deleted.map((name) => `> - \`${name}\``),
+    ""
+  ];
+}
 function renderSummary(result) {
   const lines = ["## GAS \u30C7\u30D7\u30ED\u30A4\u7D50\u679C", ""];
   if (!result.changed) {
     lines.push("\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
   } else {
     lines.push(
+      ...deletionNotice(result.diff.deleted),
       ...section("\u8FFD\u52A0", result.diff.added),
       ...section("\u5909\u66F4", result.diff.modified),
-      ...section("\u524A\u9664", result.diff.deleted)
+      ...section("\u524A\u9664", result.diff.deleted),
+      `\u8FFD\u52A0: ${result.diff.added.length} / \u5909\u66F4: ${result.diff.modified.length} / \u524A\u9664: ${result.diff.deleted.length}`,
+      ""
     );
   }
   const facts = [];
@@ -30197,6 +30312,9 @@ function renderMultiSummary(result, targets) {
   for (const entry of result.completed) {
     lines.push(`### ${entry.project} (${entry.environment})`, "");
     lines.push(entry.result.changed ? "\u5909\u66F4\u3042\u308A" : "\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
+    if (entry.result.changed) {
+      lines.push(...deletionNotice(entry.result.diff.deleted));
+    }
     const facts = [];
     if (entry.result.versionNumber !== void 0) facts.push(`- \u30D0\u30FC\u30B8\u30E7\u30F3: \`${entry.result.versionNumber}\``);
     if (entry.result.previousVersionNumber !== void 0) {
@@ -30324,7 +30442,8 @@ async function buildDeployTargets(targets, options) {
       ignore,
       dryRun: options.dryRun,
       createVersion: options.createVersion,
-      description: options.description
+      description: options.description,
+      allowDelete: options.allowDelete
     });
   }
   return result;
@@ -30426,6 +30545,7 @@ async function runSingleProject(scriptId) {
   const projectType = parseProjectType(core.getInput("project-type") || "standalone");
   const dryRun = parseBooleanInput("dry-run");
   const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const ignore = await resolveIgnorePatterns(rootDir, core.getInput("ignore"));
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -30436,8 +30556,11 @@ async function runSingleProject(scriptId) {
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds: [] });
   core.setSecret(accessToken);
+  for (const warning2 of preflightWarnings) {
+    core.warning(warning2);
+  }
   const result = await deploy(new AppsScriptClient(accessToken), {
     scriptId,
     rootDir,
@@ -30446,6 +30569,7 @@ async function runSingleProject(scriptId) {
     projectType,
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description
   });
   for (const warning2 of result.warnings) {
@@ -30484,6 +30608,7 @@ async function runMultiProject() {
   const targets = resolveTargets(config, { environment, projects, env: process.env });
   const dryRun = parseBooleanInput("dry-run");
   const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
   const commentOnPr = parseBooleanInput("comment-on-pr");
   const descriptionInput = core.getInput("description");
   const provenanceSource = await resolveProvenanceSource(process.env);
@@ -30495,13 +30620,19 @@ async function runMultiProject() {
     ignoreInput: core.getInput("ignore"),
     dryRun,
     createVersion,
+    allowDelete,
     description: versionDescription.description
   });
   const credentials = parseCredentials(core.getInput("credentials", { required: true }));
   core.setSecret(credentials.clientSecret);
   core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
+  const scriptIds = [...new Set(targets.map((target) => target.scriptId))];
+  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds });
   core.setSecret(accessToken);
+  for (const warning2 of preflightWarnings) {
+    core.warning(warning2);
+  }
+  core.info(`\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D: ${scriptIds.length} \u4EF6\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8AAD\u307F\u53D6\u308A\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F`);
   const client = new AppsScriptClient(accessToken);
   const multiResult = await deployAll(client, deployTargets);
   for (const entry of multiResult.completed) {

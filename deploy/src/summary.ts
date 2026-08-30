@@ -5,6 +5,24 @@ function section(title: string, items: string[]): string[] {
   return [`### ${title} (${items.length})`, '', ...items.map((item) => `- \`${item}\``), ''];
 }
 
+/**
+ * 削除を独立した警告ブロックとして先頭に出す。
+ *
+ * 「追加 / 変更 / 削除」を同じ見出しで並べると、消えるファイルが他の変更に埋もれる。
+ * 削除だけは復旧に Apps Script のバージョン履歴を遡る必要があり、レビューで見落とすと
+ * 影響が大きい。PR コメントでも同じ関数を通るため、レビュー時に目に入る。
+ */
+function deletionNotice(deleted: string[]): string[] {
+  if (deleted.length === 0) return [];
+  return [
+    `> [!WARNING]`,
+    `> **以下の ${deleted.length} ファイルがリモートから削除されます**`,
+    '>',
+    ...deleted.map((name) => `> - \`${name}\``),
+    '',
+  ];
+}
+
 export function renderSummary(result: DeployResult): string {
   const lines: string[] = ['## GAS デプロイ結果', ''];
 
@@ -12,9 +30,12 @@ export function renderSummary(result: DeployResult): string {
     lines.push('差分がないため、変更はありません。', '');
   } else {
     lines.push(
+      ...deletionNotice(result.diff.deleted),
       ...section('追加', result.diff.added),
       ...section('変更', result.diff.modified),
       ...section('削除', result.diff.deleted),
+      `追加: ${result.diff.added.length} / 変更: ${result.diff.modified.length} / 削除: ${result.diff.deleted.length}`,
+      '',
     );
   }
 
@@ -48,6 +69,9 @@ export function renderMultiSummary(result: MultiDeployResult, targets: readonly 
   for (const entry of result.completed) {
     lines.push(`### ${entry.project} (${entry.environment})`, '');
     lines.push(entry.result.changed ? '変更あり' : '差分がないため、変更はありません。', '');
+    if (entry.result.changed) {
+      lines.push(...deletionNotice(entry.result.diff.deleted));
+    }
 
     const facts: string[] = [];
     if (entry.result.versionNumber !== undefined) facts.push(`- バージョン: \`${entry.result.versionNumber}\``);

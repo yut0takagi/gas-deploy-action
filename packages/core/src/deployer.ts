@@ -1,5 +1,6 @@
 import type { AppsScriptClient } from './api-client.js';
 import { diffFiles, hasChanges } from './differ.js';
+import { GasDeployError } from './errors.js';
 import { collectFiles } from './file-collector.js';
 import type { FileDiff, ProjectType } from './types.js';
 
@@ -10,13 +11,25 @@ export const DEPLOYMENT_LIMIT = 20;
 export const DEPLOYMENT_COUNT_WARN_THRESHOLD = 18;
 
 /**
- * 削除がこの割合以上を占める場合に警告する。
- * root-dir の指定ミスやビルド失敗で、稼働中のスクリプトが空になる事故を防ぐ。
+ * 削除がこの割合以上を占める場合に、事故とみなして停止する。
+ * root-dir の指定ミスやビルド失敗で、稼働中のスクリプトが空になるのを防ぐ。
  */
 export const MASS_DELETION_RATIO = 0.5;
 
-/** 1〜2 件の通常の削除で警告しないための下限。 */
+/** 1〜2 件の通常の削除で止めないための下限。 */
 export const MASS_DELETION_MIN_FILES = 2;
+
+/**
+ * 削除が事故の規模かどうか。
+ *
+ * 「1件でも削除なら止める」にはしていない。ファイルを1つ消すたびに入力の追加を
+ * 求めることになり、やがて allow-delete を恒久的に true にして置きっぱなしにする。
+ * そうなると、本当に止めたい事故のときにも素通りする。止める対象を事故の規模だけに
+ * 絞ることで、フラグを立てる行為そのものに意味を残す。
+ */
+export function isMassDeletion(deletedCount: number, remoteCount: number): boolean {
+  return deletedCount >= MASS_DELETION_MIN_FILES && deletedCount >= Math.ceil(remoteCount * MASS_DELETION_RATIO);
+}
 
 export interface DeployOptions {
   scriptId: string;
@@ -27,6 +40,11 @@ export interface DeployOptions {
   dryRun: boolean;
   createVersion: boolean;
   description: string;
+  /**
+   * 事故の規模の削除を許可する。既定は false で、その場合は書き込まずに失敗する。
+   * 意図的な大量削除（レイアウト変更、旧ファイルの一括整理）のときだけ true にする。
+   */
+  allowDelete?: boolean;
 }
 
 export interface DeployResult {
@@ -64,17 +82,36 @@ export async function deploy(client: AppsScriptClient, options: DeployOptions): 
     warnings.push(URL_CHANGE_WARNING);
   }
 
-  const isMassDeletion =
-    diff.deleted.length >= MASS_DELETION_MIN_FILES &&
-    diff.deleted.length >= Math.ceil(remote.length * MASS_DELETION_RATIO);
-  if (isMassDeletion) {
+  const massDeletion = isMassDeletion(diff.deleted.length, remote.length);
+  if (massDeletion) {
     warnings.push(
-      `リモートの ${remote.length} 件のうち ${diff.deleted.length} 件が削除されます。root-dir の指定やビルド結果が正しいか確認してください`,
+      `リモートの ${remote.length} 件のうち ${diff.deleted.length} 件が削除されます: ${diff.deleted.join(', ')}`,
     );
   }
 
+  // dry-run は「実際に走らせたらどうなるか」を見るためのもの。ここで失敗させると、
+  // 削除の内容を確認してから allow-delete を判断する、という手順が踏めなくなる。
+  // 警告は上で出しているので、消えるファイルは dry-run でも読める。
   if (options.dryRun) {
     return { changed: true, diff, warnings };
+  }
+
+  // 書き込みの直前で止める。collectFiles と getContent は済んでいるが、どちらも読み取り
+  // であり、リモートには何も起きていない。
+  if (massDeletion && options.allowDelete !== true) {
+    throw new GasDeployError(
+      `リモートの ${remote.length} 件のうち ${diff.deleted.length} 件が削除されるため、デプロイを中止しました`,
+      {
+        nextSteps: [
+          `削除されるファイル: ${diff.deleted.join(', ')}`,
+          'root-dir の指定が正しいか確認してください（誤ったディレクトリを指すと、リモートのファイルがほぼすべて削除されます）',
+          'ビルドを伴う構成では、ビルドが成功して出力が揃っているか確認してください',
+          '.claspignore で意図せず除外されているファイルが無いか確認してください',
+          'この削除が意図したものであれば allow-delete: true を指定してください',
+          'dry-run: true で実行すると、書き込まずに削除内容だけを確認できます',
+        ],
+      },
+    );
   }
 
   // 参照先を書き換える前に、いま指しているバージョンを記録する。

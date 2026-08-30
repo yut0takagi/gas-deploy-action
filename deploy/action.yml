@@ -33,6 +33,15 @@ inputs:
     description: 'バージョン作成とデプロイを行うかどうか'
     required: false
     default: 'true'
+  allow-delete:
+    description: >-
+      事故の規模の削除を許可するかどうか。root-dir の内容はリモートを完全に置換するため、
+      指定を誤るとリモートのファイルが失われます。リモートの半数以上（かつ2件以上）が
+      削除される場合、既定では書き込みを行わずに失敗します。意図的な一括整理のときだけ
+      true を指定してください。dry-run では削除内容を確認するため、この設定に関わらず
+      失敗しません。
+    required: false
+    default: 'false'
   description:
     description: 'バージョンの説明。省略時は ci-<sha7>-<run_number>'
     required: false

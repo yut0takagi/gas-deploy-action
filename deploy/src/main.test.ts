@@ -143,11 +143,26 @@ describe('buildDeployTargets', () => {
       dryRun: true,
       createVersion: false,
       description: 'ci-test',
+      allowDelete: false,
     });
 
     expect(result).toEqual([
-      { ...targets[0], ignore: ['from-config/**'], dryRun: true, createVersion: false, description: 'ci-test' },
-      { ...targets[1], ignore: ['from-input/**'], dryRun: true, createVersion: false, description: 'ci-test' },
+      {
+        ...targets[0],
+        ignore: ['from-config/**'],
+        dryRun: true,
+        createVersion: false,
+        description: 'ci-test',
+        allowDelete: false,
+      },
+      {
+        ...targets[1],
+        ignore: ['from-input/**'],
+        dryRun: true,
+        createVersion: false,
+        description: 'ci-test',
+        allowDelete: false,
+      },
     ]);
   });
 
@@ -157,6 +172,7 @@ describe('buildDeployTargets', () => {
     const result = await buildDeployTargets(targets, {
       ignoreInput: '',
       dryRun: false,
+      allowDelete: false,
       createVersion: true,
       description: 'ci-test',
     });

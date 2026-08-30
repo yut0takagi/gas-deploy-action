@@ -54,6 +54,22 @@ describe('checkTokenHealth', () => {
     expect(result.nextSteps).toContain('同意画面を確認してください');
   });
 
+  // 再認証ポリシーによる失効は「今デプロイしたら確実に失敗する」もの。分類されていない
+  // コードは unknown に倒れる既定があるため、明示的に invalid だと確認しておく。
+  it('reports a reauth-policy expiry as invalid', async () => {
+    const deps = {
+      ...healthyDeps(),
+      exchangeToken: vi.fn(async () => {
+        throw new GasDeployError('認証情報が失効しています（Google Workspace の再認証ポリシー） (400)', {
+          code: 'reauth-required',
+        });
+      }),
+    };
+    const result = await checkTokenHealth({ credentials: CREDENTIALS }, deps);
+    expect(result.status).toBe('invalid');
+    expect(result.reason).toBe('reauth-required');
+  });
+
   it('reports insufficient scope as invalid rather than blaming expiry', async () => {
     const deps = {
       ...healthyDeps(),

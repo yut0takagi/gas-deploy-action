@@ -51,6 +51,7 @@ export interface TokenHealthDeps {
 function toStatus(code: GasErrorCode | undefined): { status: TokenHealthStatus; reason: TokenHealthReason } {
   switch (code) {
     case 'token-invalid':
+    case 'reauth-required':
     case 'insufficient-scope':
     case 'unauthorized':
     case 'api-disabled':
