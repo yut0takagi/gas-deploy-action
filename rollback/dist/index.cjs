@@ -19674,7 +19674,7 @@ var require_core = __commonJS({
       process.env["PATH"] = `${inputPath}${path.delimiter}${process.env["PATH"]}`;
     }
     exports2.addPath = addPath;
-    function getInput2(name, options) {
+    function getInput3(name, options) {
       const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
       if (options && options.required && !val) {
         throw new Error(`Input required and not supplied: ${name}`);
@@ -19684,9 +19684,9 @@ var require_core = __commonJS({
       }
       return val.trim();
     }
-    exports2.getInput = getInput2;
+    exports2.getInput = getInput3;
     function getMultilineInput(name, options) {
-      const inputs = getInput2(name, options).split("\n").filter((x) => x !== "");
+      const inputs = getInput3(name, options).split("\n").filter((x) => x !== "");
       if (options && options.trimWhitespace === false) {
         return inputs;
       }
@@ -19696,7 +19696,7 @@ var require_core = __commonJS({
     function getBooleanInput2(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
-      const val = getInput2(name, options);
+      const val = getInput3(name, options);
       if (trueValue.includes(val))
         return true;
       if (falseValue.includes(val))
@@ -19735,10 +19735,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports2.error = error;
-    function warning2(message, properties = {}) {
+    function warning3(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports2.warning = warning2;
+    exports2.warning = warning3;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -21451,12 +21451,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning2) {
+    function warn(logLevel, warning3) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning2);
+          node_process.emitWarning(warning3);
         else
-          console.warn(warning2);
+          console.warn(warning3);
       }
     }
     exports2.debug = debug;
@@ -24925,9 +24925,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning2) => {
+        this.onError = (source, code, message, warning3) => {
           const pos = getErrorPos(source);
-          if (warning2)
+          if (warning3)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -25000,10 +25000,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning2) => {
+            this.directives.add(token.source, (offset, message, warning3) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning3);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -27045,7 +27045,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
+      doc.warnings.forEach((warning3) => log.warn(doc.options.logLevel, warning3));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -27135,8 +27135,14 @@ var require_dist = __commonJS({
   }
 });
 
-// rollback/src/index.ts
-var core2 = __toESM(require_core(), 1);
+// packages/action-io/src/index.ts
+var core = __toESM(require_core(), 1);
+
+// packages/core/src/types.ts
+var PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
+function isProjectType(value) {
+  return typeof value === "string" && PROJECT_TYPES.includes(value);
+}
 
 // packages/core/src/errors.ts
 var GasDeployError = class extends Error {
@@ -27428,9 +27434,6 @@ async function exchangeToken(credentials, fetchImpl = fetch) {
   const rawScope = parsed.scope;
   const grantedScopes = typeof rawScope === "string" ? rawScope.split(" ").filter((s) => s.length > 0) : [];
   return { accessToken, grantedScopes };
-}
-async function getAccessToken(credentials, fetchImpl = fetch) {
-  return (await exchangeToken(credentials, fetchImpl)).accessToken;
 }
 
 // packages/core/src/ignore.ts
@@ -27736,7 +27739,6 @@ var AppsScriptClient = class {
 // packages/core/src/config.ts
 var import_promises = require("node:fs/promises");
 var import_yaml = __toESM(require_dist(), 1);
-var VALID_PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
 function fail(path, message, nextSteps) {
   throw new GasDeployError(`${path}: ${message}`, { nextSteps });
 }
@@ -27843,11 +27845,11 @@ function parseConfig(yamlText) {
     let type;
     if (projectRaw.type !== void 0) {
       const typeRaw = projectRaw.type;
-      if (typeof typeRaw !== "string" || !VALID_PROJECT_TYPES.includes(typeRaw)) {
+      if (!isProjectType(typeRaw)) {
         fail(
           `${projectPath}.type`,
-          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${VALID_PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
-          [`type \u306B\u306F ${VALID_PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
+          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
+          [`type \u306B\u306F ${PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
         );
       }
       type = typeRaw;
@@ -28179,8 +28181,104 @@ async function rollback(client, options) {
   return result;
 }
 
+// packages/core/src/preflight.ts
+var DEFAULT_DEPS = {
+  exchange: (credentials) => exchangeToken(credentials),
+  readProject: async (accessToken, scriptId) => {
+    await new AppsScriptClient(accessToken).getProject(scriptId);
+  }
+};
+function verifyScopes(grantedScopes) {
+  if (grantedScopes.length === 0) {
+    return [];
+  }
+  const missing = REQUIRED_SCOPES.filter((required) => !grantedScopes.includes(required));
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    `\u8A8D\u8A3C\u60C5\u5831\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30FC\u30D7\u304C\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u4E0D\u8DB3: ${missing.join(", ")}\uFF09\u3002\u30C7\u30D7\u30ED\u30A4\u304C 403 \u3067\u5931\u6557\u3059\u308B\u5834\u5408\u306F\u3001clasp login \u3092\u3084\u308A\u76F4\u3057\u3066\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3066\u304F\u3060\u3055\u3044`
+  ];
+}
+async function preflight(options, deps = {}) {
+  const { exchange, readProject } = { ...DEFAULT_DEPS, ...deps };
+  const { accessToken, grantedScopes } = await exchange(options.credentials);
+  const warnings = verifyScopes(grantedScopes);
+  const checkedScriptIds = [];
+  for (const scriptId of options.scriptIds) {
+    try {
+      await readProject(accessToken, scriptId);
+    } catch (cause) {
+      const detail = cause instanceof GasDeployError ? cause : void 0;
+      throw new GasDeployError(
+        `\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08scriptId: ${scriptId}\uFF09: ${detail?.message ?? (cause instanceof Error ? cause.message : String(cause))}`,
+        {
+          cause,
+          ...detail?.code !== void 0 ? { code: detail.code } : {},
+          ...detail?.status !== void 0 ? { status: detail.status } : {},
+          nextSteps: [
+            ...detail?.nextSteps ?? [],
+            "\u3053\u306E\u78BA\u8A8D\u306F\u8AAD\u307F\u53D6\u308A\u306E\u307F\u3067\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u307E\u3060\u66F8\u304D\u63DB\u3048\u3089\u308C\u3066\u3044\u307E\u305B\u3093"
+          ]
+        }
+      );
+    }
+    checkedScriptIds.push(scriptId);
+  }
+  return { accessToken, checkedScriptIds, warnings };
+}
+
+// packages/action-io/src/index.ts
+function parseBooleanInput(name) {
+  try {
+    return core.getBooleanInput(name);
+  } catch (error) {
+    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
+      cause: error,
+      nextSteps: [
+        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
+        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
+}
+function readCredentials() {
+  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
+  core.setSecret(credentials.clientSecret);
+  core.setSecret(credentials.refreshToken);
+  return credentials;
+}
+async function authenticate(scriptIds = []) {
+  const credentials = readCredentials();
+  const { accessToken, warnings } = await preflight({ credentials, scriptIds });
+  core.setSecret(accessToken);
+  for (const warning3 of warnings) {
+    core.warning(warning3);
+  }
+  return accessToken;
+}
+async function readConfigInput() {
+  const configPath = core.getInput("config") || "gasdeploy.yml";
+  return readConfigFile(configPath, {
+    notFoundSteps: [
+      "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+      `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+    ]
+  });
+}
+function runAction(run2) {
+  void run2().catch((error) => {
+    if (error instanceof GasDeployError) {
+      core.setFailed(error.format());
+    } else {
+      core.setFailed(error instanceof Error ? error.message : String(error));
+    }
+  });
+}
+
 // rollback/src/main.ts
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 
 // rollback/src/summary.ts
 function renderRollbackSummary(result) {
@@ -28207,25 +28305,12 @@ function renderRollbackSummary(result) {
   }
   if (facts.length > 0) lines.push(...facts, "");
   if (result.warnings.length > 0) {
-    lines.push("### \u26A0\uFE0F \u8B66\u544A", "", ...result.warnings.map((warning2) => `- ${warning2}`), "");
+    lines.push("### \u26A0\uFE0F \u8B66\u544A", "", ...result.warnings.map((warning3) => `- ${warning3}`), "");
   }
   return lines.join("\n");
 }
 
 // rollback/src/main.ts
-function parseBooleanInput(name) {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
-      cause: error,
-      nextSteps: [
-        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
-        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
-}
 function parseVersionNumberInput(raw) {
   const trimmed = raw.trim();
   if (trimmed === "") {
@@ -28277,17 +28362,17 @@ function resolveConfigTarget(yamlText, environment, project, env) {
   return target.deploymentId === void 0 ? { scriptId: target.scriptId } : { scriptId: target.scriptId, deploymentId: target.deploymentId };
 }
 async function run() {
-  const versionNumber = parseVersionNumberInput(core.getInput("version-number"));
+  const versionNumber = parseVersionNumberInput(core2.getInput("version-number"));
   const dryRun = parseBooleanInput("dry-run");
-  const descriptionInput = core.getInput("description");
-  const deploymentIdInput = core.getInput("deployment-id");
-  const scriptIdInput = core.getInput("script-id");
+  const descriptionInput = core2.getInput("description");
+  const deploymentIdInput = core2.getInput("deployment-id");
+  const scriptIdInput = core2.getInput("script-id");
   let target;
   if (scriptIdInput) {
     target = { scriptId: scriptIdInput };
   } else {
-    const environment = core.getInput("environment");
-    const project = core.getInput("project");
+    const environment = core2.getInput("environment");
+    const project = core2.getInput("project");
     if (!environment || !project) {
       throw new GasDeployError("config \u30E2\u30FC\u30C9\u3067\u306F environment \u3068 project \u306E\u4E21\u65B9\u306E\u6307\u5B9A\u304C\u5FC5\u8981\u3067\u3059", {
         nextSteps: [
@@ -28298,22 +28383,10 @@ async function run() {
         ]
       });
     }
-    const configPath = core.getInput("config") || "gasdeploy.yml";
-    const yamlText = await readConfigFile(configPath, {
-      notFoundSteps: [
-        "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
-        `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-        "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-    target = resolveConfigTarget(yamlText, environment, project, process.env);
+    target = resolveConfigTarget(await readConfigInput(), environment, project, process.env);
   }
   const deploymentId = deploymentIdInput || target.deploymentId;
-  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
-  core.setSecret(accessToken);
+  const accessToken = await authenticate();
   const result = await rollback(new AppsScriptClient(accessToken), {
     scriptId: target.scriptId,
     ...deploymentId ? { deploymentId } : {},
@@ -28321,24 +28394,18 @@ async function run() {
     dryRun,
     ...descriptionInput ? { description: descriptionInput } : {}
   });
-  for (const warning2 of result.warnings) {
-    core.warning(warning2);
+  for (const warning3 of result.warnings) {
+    core2.warning(warning3);
   }
   const summary2 = renderRollbackSummary(result);
-  core.setOutput("rolled-back", String(result.rolledBack));
-  core.setOutput("from-version", String(result.fromVersion));
-  core.setOutput("to-version", String(result.toVersion));
-  core.setOutput("deployment-id", result.deploymentId);
-  core.setOutput("web-app-url", result.webAppUrl ?? "");
-  core.setOutput("summary", summary2);
-  await core.summary.addRaw(summary2).write();
+  core2.setOutput("rolled-back", String(result.rolledBack));
+  core2.setOutput("from-version", String(result.fromVersion));
+  core2.setOutput("to-version", String(result.toVersion));
+  core2.setOutput("deployment-id", result.deploymentId);
+  core2.setOutput("web-app-url", result.webAppUrl ?? "");
+  core2.setOutput("summary", summary2);
+  await core2.summary.addRaw(summary2).write();
 }
 
 // rollback/src/index.ts
-void run().catch((error) => {
-  if (error instanceof GasDeployError) {
-    core2.setFailed(error.format());
-  } else {
-    core2.setFailed(error instanceof Error ? error.message : String(error));
-  }
-});
+runAction(run);

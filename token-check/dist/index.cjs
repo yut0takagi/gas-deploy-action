@@ -19674,7 +19674,7 @@ var require_core = __commonJS({
       process.env["PATH"] = `${inputPath}${path.delimiter}${process.env["PATH"]}`;
     }
     exports2.addPath = addPath;
-    function getInput2(name, options) {
+    function getInput3(name, options) {
       const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
       if (options && options.required && !val) {
         throw new Error(`Input required and not supplied: ${name}`);
@@ -19684,9 +19684,9 @@ var require_core = __commonJS({
       }
       return val.trim();
     }
-    exports2.getInput = getInput2;
+    exports2.getInput = getInput3;
     function getMultilineInput(name, options) {
-      const inputs = getInput2(name, options).split("\n").filter((x) => x !== "");
+      const inputs = getInput3(name, options).split("\n").filter((x) => x !== "");
       if (options && options.trimWhitespace === false) {
         return inputs;
       }
@@ -19696,7 +19696,7 @@ var require_core = __commonJS({
     function getBooleanInput2(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
-      const val = getInput2(name, options);
+      const val = getInput3(name, options);
       if (trueValue.includes(val))
         return true;
       if (falseValue.includes(val))
@@ -19735,10 +19735,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports2.error = error;
-    function warning2(message, properties = {}) {
+    function warning3(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports2.warning = warning2;
+    exports2.warning = warning3;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -21451,12 +21451,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning2) {
+    function warn(logLevel, warning3) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning2);
+          node_process.emitWarning(warning3);
         else
-          console.warn(warning2);
+          console.warn(warning3);
       }
     }
     exports2.debug = debug;
@@ -24925,9 +24925,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning2) => {
+        this.onError = (source, code, message, warning3) => {
           const pos = getErrorPos(source);
-          if (warning2)
+          if (warning3)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -25000,10 +25000,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning2) => {
+            this.directives.add(token.source, (offset, message, warning3) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning3);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -27045,7 +27045,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
+      doc.warnings.forEach((warning3) => log.warn(doc.options.logLevel, warning3));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -27135,8 +27135,8 @@ var require_dist = __commonJS({
   }
 });
 
-// token-check/src/index.ts
-var core2 = __toESM(require_core(), 1);
+// packages/action-io/src/index.ts
+var core = __toESM(require_core(), 1);
 
 // packages/core/src/errors.ts
 var GasDeployError = class extends Error {
@@ -27798,8 +27798,38 @@ async function checkTokenHealth(options, deps = {}) {
   };
 }
 
+// packages/action-io/src/index.ts
+function parseBooleanInput(name) {
+  try {
+    return core.getBooleanInput(name);
+  } catch (error) {
+    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
+      cause: error,
+      nextSteps: [
+        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
+        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
+}
+function readCredentials() {
+  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
+  core.setSecret(credentials.clientSecret);
+  core.setSecret(credentials.refreshToken);
+  return credentials;
+}
+function runAction(run2) {
+  void run2().catch((error) => {
+    if (error instanceof GasDeployError) {
+      core.setFailed(error.format());
+    } else {
+      core.setFailed(error instanceof Error ? error.message : String(error));
+    }
+  });
+}
+
 // token-check/src/main.ts
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 
 // token-check/src/summary.ts
 function renderTokenHealthSummary(health) {
@@ -27835,19 +27865,6 @@ function renderTokenHealthSummary(health) {
 }
 
 // token-check/src/main.ts
-function parseBooleanInput(name) {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
-      cause: error,
-      nextSteps: [
-        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
-        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
-}
 function decideOutcome(health, options) {
   if (health.status === "valid") {
     return { level: "none", message: health.message };
@@ -27859,33 +27876,25 @@ function decideOutcome(health, options) {
 async function run() {
   const failOnInvalid = parseBooleanInput("fail-on-invalid");
   const failOnUnknown = parseBooleanInput("fail-on-unknown");
-  const scriptId = core.getInput("script-id");
-  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
+  const scriptId = core2.getInput("script-id");
+  const credentials = readCredentials();
   const health = await checkTokenHealth({
     credentials,
     ...scriptId ? { scriptId } : {}
   });
   const summary2 = renderTokenHealthSummary(health);
-  core.setOutput("status", health.status);
-  core.setOutput("reason", health.reason);
-  core.setOutput("project-checked", String(health.projectChecked));
-  core.setOutput("summary", summary2);
-  await core.summary.addRaw(summary2).write();
+  core2.setOutput("status", health.status);
+  core2.setOutput("reason", health.reason);
+  core2.setOutput("project-checked", String(health.projectChecked));
+  core2.setOutput("summary", summary2);
+  await core2.summary.addRaw(summary2).write();
   const outcome = decideOutcome(health, { failOnInvalid, failOnUnknown });
   if (outcome.level === "failure") {
-    core.setFailed(outcome.message);
+    core2.setFailed(outcome.message);
   } else if (outcome.level === "warning") {
-    core.warning(outcome.message);
+    core2.warning(outcome.message);
   }
 }
 
 // token-check/src/index.ts
-void run().catch((error) => {
-  if (error instanceof GasDeployError) {
-    core2.setFailed(error.format());
-  } else {
-    core2.setFailed(error instanceof Error ? error.message : String(error));
-  }
-});
+runAction(run);

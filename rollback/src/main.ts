@@ -1,30 +1,7 @@
 import * as core from '@actions/core';
-import {
-  AppsScriptClient,
-  GasDeployError,
-  getAccessToken,
-  parseConfig,
-  parseCredentials,
-  readConfigFile,
-  resolveTargets,
-  rollback,
-} from '@gas-deploy/core';
+import { authenticate, parseBooleanInput, readConfigInput } from '@gas-deploy/action-io';
+import { AppsScriptClient, GasDeployError, parseConfig, resolveTargets, rollback } from '@gas-deploy/core';
 import { renderRollbackSummary } from './summary.js';
-
-/** `core.getBooleanInput` の raw throw を、次の手順つきの `GasDeployError` に包み直す。 */
-function parseBooleanInput(name: string): boolean {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} には true または false を指定してください`, {
-      cause: error,
-      nextSteps: [
-        '現在の値は真偽値として解釈できません',
-        'GitHub Actions の式を使う場合は ${{ ... }} が true / false を返すか確認してください',
-      ],
-    });
-  }
-}
 
 /**
  * `version-number` 入力をパースする。空文字列は「1つ前に戻す」を意味する `undefined`。
@@ -140,27 +117,14 @@ export async function run(): Promise<void> {
         ],
       });
     }
-    const configPath = core.getInput('config') || 'gasdeploy.yml';
-    const yamlText = await readConfigFile(configPath, {
-      notFoundSteps: [
-        'scriptId を直接指定する場合は script-id 入力を使ってください',
-        `gasdeploy.yml を使う場合は ${configPath} に設定ファイルを作成してください`,
-        'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
-      ],
-    });
-    target = resolveConfigTarget(yamlText, environment, project, process.env);
+    target = resolveConfigTarget(await readConfigInput(), environment, project, process.env);
   }
 
   // deployment-id 入力は config の値より優先する。障害対応で config を書き換えずに
   // 特定のデプロイを名指ししたい場面があるため。
   const deploymentId = deploymentIdInput || target.deploymentId;
 
-  const credentials = parseCredentials(core.getInput('credentials', { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
-
-  const accessToken = await getAccessToken(credentials);
-  core.setSecret(accessToken);
+  const accessToken = await authenticate();
 
   const result = await rollback(new AppsScriptClient(accessToken), {
     scriptId: target.scriptId,

@@ -19674,7 +19674,7 @@ var require_core = __commonJS({
       process.env["PATH"] = `${inputPath}${path.delimiter}${process.env["PATH"]}`;
     }
     exports2.addPath = addPath;
-    function getInput2(name, options) {
+    function getInput3(name, options) {
       const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
       if (options && options.required && !val) {
         throw new Error(`Input required and not supplied: ${name}`);
@@ -19684,19 +19684,19 @@ var require_core = __commonJS({
       }
       return val.trim();
     }
-    exports2.getInput = getInput2;
+    exports2.getInput = getInput3;
     function getMultilineInput(name, options) {
-      const inputs = getInput2(name, options).split("\n").filter((x) => x !== "");
+      const inputs = getInput3(name, options).split("\n").filter((x) => x !== "");
       if (options && options.trimWhitespace === false) {
         return inputs;
       }
       return inputs.map((input) => input.trim());
     }
     exports2.getMultilineInput = getMultilineInput;
-    function getBooleanInput(name, options) {
+    function getBooleanInput2(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
-      const val = getInput2(name, options);
+      const val = getInput3(name, options);
       if (trueValue.includes(val))
         return true;
       if (falseValue.includes(val))
@@ -19704,7 +19704,7 @@ var require_core = __commonJS({
       throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}
 Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
     }
-    exports2.getBooleanInput = getBooleanInput;
+    exports2.getBooleanInput = getBooleanInput2;
     function setOutput2(name, value) {
       const filePath = process.env["GITHUB_OUTPUT"] || "";
       if (filePath) {
@@ -19735,10 +19735,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports2.error = error;
-    function warning(message, properties = {}) {
+    function warning2(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports2.warning = warning;
+    exports2.warning = warning2;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -21451,12 +21451,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning) {
+    function warn(logLevel, warning2) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning);
+          node_process.emitWarning(warning2);
         else
-          console.warn(warning);
+          console.warn(warning2);
       }
     }
     exports2.debug = debug;
@@ -24925,9 +24925,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning) => {
+        this.onError = (source, code, message, warning2) => {
           const pos = getErrorPos(source);
-          if (warning)
+          if (warning2)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -25000,10 +25000,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning) => {
+            this.directives.add(token.source, (offset, message, warning2) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -27045,7 +27045,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
+      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -27135,8 +27135,14 @@ var require_dist = __commonJS({
   }
 });
 
-// status/src/index.ts
-var core2 = __toESM(require_core(), 1);
+// packages/action-io/src/index.ts
+var core = __toESM(require_core(), 1);
+
+// packages/core/src/types.ts
+var PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
+function isProjectType(value) {
+  return typeof value === "string" && PROJECT_TYPES.includes(value);
+}
 
 // packages/core/src/errors.ts
 var GasDeployError = class extends Error {
@@ -27428,9 +27434,6 @@ async function exchangeToken(credentials, fetchImpl = fetch) {
   const rawScope = parsed.scope;
   const grantedScopes = typeof rawScope === "string" ? rawScope.split(" ").filter((s) => s.length > 0) : [];
   return { accessToken, grantedScopes };
-}
-async function getAccessToken(credentials, fetchImpl = fetch) {
-  return (await exchangeToken(credentials, fetchImpl)).accessToken;
 }
 
 // packages/core/src/ignore.ts
@@ -27736,7 +27739,6 @@ var AppsScriptClient = class {
 // packages/core/src/config.ts
 var import_promises = require("node:fs/promises");
 var import_yaml = __toESM(require_dist(), 1);
-var VALID_PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
 function fail(path, message, nextSteps) {
   throw new GasDeployError(`${path}: ${message}`, { nextSteps });
 }
@@ -27843,11 +27845,11 @@ function parseConfig(yamlText) {
     let type;
     if (projectRaw.type !== void 0) {
       const typeRaw = projectRaw.type;
-      if (typeof typeRaw !== "string" || !VALID_PROJECT_TYPES.includes(typeRaw)) {
+      if (!isProjectType(typeRaw)) {
         fail(
           `${projectPath}.type`,
-          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${VALID_PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
-          [`type \u306B\u306F ${VALID_PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
+          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
+          [`type \u306B\u306F ${PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
         );
       }
       type = typeRaw;
@@ -28024,6 +28026,53 @@ function resolveTargets(config, options) {
   return targets;
 }
 
+// packages/core/src/preflight.ts
+var DEFAULT_DEPS = {
+  exchange: (credentials) => exchangeToken(credentials),
+  readProject: async (accessToken, scriptId) => {
+    await new AppsScriptClient(accessToken).getProject(scriptId);
+  }
+};
+function verifyScopes(grantedScopes) {
+  if (grantedScopes.length === 0) {
+    return [];
+  }
+  const missing = REQUIRED_SCOPES.filter((required) => !grantedScopes.includes(required));
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    `\u8A8D\u8A3C\u60C5\u5831\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30FC\u30D7\u304C\u4ED8\u4E0E\u3055\u308C\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF08\u4E0D\u8DB3: ${missing.join(", ")}\uFF09\u3002\u30C7\u30D7\u30ED\u30A4\u304C 403 \u3067\u5931\u6557\u3059\u308B\u5834\u5408\u306F\u3001clasp login \u3092\u3084\u308A\u76F4\u3057\u3066\u8A8D\u8A3C\u60C5\u5831\u3092\u518D\u767A\u884C\u3057\u3066\u304F\u3060\u3055\u3044`
+  ];
+}
+async function preflight(options, deps = {}) {
+  const { exchange, readProject } = { ...DEFAULT_DEPS, ...deps };
+  const { accessToken, grantedScopes } = await exchange(options.credentials);
+  const warnings = verifyScopes(grantedScopes);
+  const checkedScriptIds = [];
+  for (const scriptId of options.scriptIds) {
+    try {
+      await readProject(accessToken, scriptId);
+    } catch (cause) {
+      const detail = cause instanceof GasDeployError ? cause : void 0;
+      throw new GasDeployError(
+        `\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08scriptId: ${scriptId}\uFF09: ${detail?.message ?? (cause instanceof Error ? cause.message : String(cause))}`,
+        {
+          cause,
+          ...detail?.code !== void 0 ? { code: detail.code } : {},
+          ...detail?.status !== void 0 ? { status: detail.status } : {},
+          nextSteps: [
+            ...detail?.nextSteps ?? [],
+            "\u3053\u306E\u78BA\u8A8D\u306F\u8AAD\u307F\u53D6\u308A\u306E\u307F\u3067\u3001\u30EA\u30E2\u30FC\u30C8\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u307E\u3060\u66F8\u304D\u63DB\u3048\u3089\u308C\u3066\u3044\u307E\u305B\u3093"
+          ]
+        }
+      );
+    }
+    checkedScriptIds.push(scriptId);
+  }
+  return { accessToken, checkedScriptIds, warnings };
+}
+
 // packages/core/src/provenance.ts
 var PROVENANCE_PATTERN = /^ci sha=([0-9a-f]{7,40})(?: run=(\d+))?(?: pr=(\d+))?(?: by=([^\s|]+))?(?: \| ([\s\S]*))?$/;
 function parseVersionDescription(description) {
@@ -28121,8 +28170,51 @@ async function getDeploymentStatus(client, options) {
   return status;
 }
 
+// packages/action-io/src/index.ts
+function parseProjectsInput(raw) {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "all") {
+    return void 0;
+  }
+  return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
+}
+function readCredentials() {
+  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
+  core.setSecret(credentials.clientSecret);
+  core.setSecret(credentials.refreshToken);
+  return credentials;
+}
+async function authenticate(scriptIds = []) {
+  const credentials = readCredentials();
+  const { accessToken, warnings } = await preflight({ credentials, scriptIds });
+  core.setSecret(accessToken);
+  for (const warning2 of warnings) {
+    core.warning(warning2);
+  }
+  return accessToken;
+}
+async function readConfigInput() {
+  const configPath = core.getInput("config") || "gasdeploy.yml";
+  return readConfigFile(configPath, {
+    notFoundSteps: [
+      "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+      `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+    ]
+  });
+}
+function runAction(run2) {
+  void run2().catch((error) => {
+    if (error instanceof GasDeployError) {
+      core.setFailed(error.format());
+    } else {
+      core.setFailed(error instanceof Error ? error.message : String(error));
+    }
+  });
+}
+
 // status/src/main.ts
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 
 // status/src/summary.ts
 function cell(value) {
@@ -28182,14 +28274,11 @@ function renderStatusSummary(results) {
 }
 
 // status/src/main.ts
-function parseProjectsInput(raw) {
-  return raw.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
-}
 function resolveStatusTargets(yamlText, options) {
   const config = parseConfig(yamlText);
   const targets = resolveTargets(config, {
     environment: options.environment,
-    projects: [...options.projects],
+    ...options.projects !== void 0 ? { projects: [...options.projects] } : {},
     env: options.env
   });
   if (options.deploymentIdInput && targets.length > 1) {
@@ -28236,15 +28325,15 @@ function toTargetResult(target, outcome) {
   return result;
 }
 async function run() {
-  const scriptIdInput = core.getInput("script-id");
-  const deploymentIdInput = core.getInput("deployment-id");
+  const scriptIdInput = core2.getInput("script-id");
+  const deploymentIdInput = core2.getInput("deployment-id");
   let targets;
   if (scriptIdInput) {
     targets = [
       { scriptId: scriptIdInput, ...deploymentIdInput ? { deploymentId: deploymentIdInput } : {} }
     ];
   } else {
-    const environment = core.getInput("environment");
+    const environment = core2.getInput("environment");
     if (!environment) {
       throw new GasDeployError("environment \u306E\u6307\u5B9A\u304C\u5FC5\u8981\u3067\u3059\uFF08config \u30E2\u30FC\u30C9\u3067\u306F\u5FC5\u9808\u3067\u3059\uFF09", {
         nextSteps: [
@@ -28253,23 +28342,15 @@ async function run() {
         ]
       });
     }
-    const configPath = core.getInput("config") || "gasdeploy.yml";
-    const projects = parseProjectsInput(core.getInput("projects") || "all");
-    const yamlText = await readConfigFile(configPath, {
-      notFoundSteps: [
-        "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
-        `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-        "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
+    const projects = parseProjectsInput(core2.getInput("projects"));
+    targets = resolveStatusTargets(await readConfigInput(), {
+      environment,
+      projects,
+      deploymentIdInput,
+      env: process.env
     });
-    targets = resolveStatusTargets(yamlText, { environment, projects, deploymentIdInput, env: process.env });
   }
-  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
-  const accessToken = await getAccessToken(credentials);
-  core.setSecret(accessToken);
-  const client = new AppsScriptClient(accessToken);
+  const client = new AppsScriptClient(await authenticate());
   const results = [];
   for (const target of targets) {
     try {
@@ -28283,36 +28364,30 @@ async function run() {
     }
   }
   const summary2 = renderStatusSummary(results);
-  core.setOutput("summary", summary2);
+  core2.setOutput("summary", summary2);
   if (scriptIdInput) {
     const only = results[0];
     if (only === void 0) {
       throw new GasDeployError("\u5BFE\u8C61\u306E\u89E3\u6C7A\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
     }
-    core.setOutput("managed", String(only.managed));
-    core.setOutput("version-number", only.versionNumber ?? "");
-    core.setOutput("sha", only.sha ?? "");
-    core.setOutput("run-id", only.runId ?? "");
-    core.setOutput("pr", only.pr ?? "");
-    core.setOutput("actor", only.actor ?? "");
-    core.setOutput("created-at", only.createdAt ?? "");
-    core.setOutput("deployment-id", only.deploymentId ?? "");
-    core.setOutput("web-app-url", only.webAppUrl ?? "");
+    core2.setOutput("managed", String(only.managed));
+    core2.setOutput("version-number", only.versionNumber ?? "");
+    core2.setOutput("sha", only.sha ?? "");
+    core2.setOutput("run-id", only.runId ?? "");
+    core2.setOutput("pr", only.pr ?? "");
+    core2.setOutput("actor", only.actor ?? "");
+    core2.setOutput("created-at", only.createdAt ?? "");
+    core2.setOutput("deployment-id", only.deploymentId ?? "");
+    core2.setOutput("web-app-url", only.webAppUrl ?? "");
   } else {
-    core.setOutput("targets", JSON.stringify(results));
+    core2.setOutput("targets", JSON.stringify(results));
   }
-  await core.summary.addRaw(summary2).write();
+  await core2.summary.addRaw(summary2).write();
   const failed = results.filter((result) => result.error !== void 0);
   if (failed.length > 0) {
-    core.setFailed(`${failed.length} \u4EF6\u306E\u5BFE\u8C61\u3067\u72B6\u6CC1\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F`);
+    core2.setFailed(`${failed.length} \u4EF6\u306E\u5BFE\u8C61\u3067\u72B6\u6CC1\u3092\u53D6\u5F97\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F`);
   }
 }
 
 // status/src/index.ts
-void run().catch((error) => {
-  if (error instanceof GasDeployError) {
-    core2.setFailed(error.format());
-  } else {
-    core2.setFailed(error instanceof Error ? error.message : String(error));
-  }
-});
+runAction(run);
