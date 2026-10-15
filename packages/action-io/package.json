@@ -1,0 +1,13 @@
+{
+  "name": "@gas-deploy/action-io",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@gas-deploy/core": "0.2.0"
+  }
+}

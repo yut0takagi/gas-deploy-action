@@ -1,9 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 import { GasDeployError } from './errors.js';
-import type { ProjectType } from './types.js';
-
-const VALID_PROJECT_TYPES: readonly ProjectType[] = ['webapp', 'addon', 'bound', 'standalone'];
+import { PROJECT_TYPES, type ProjectType, isProjectType } from './types.js';
 
 export interface EnvironmentConfig {
   scriptId: string;
@@ -182,14 +180,14 @@ export function parseConfig(yamlText: string): GasDeployConfig {
     let type: ProjectType | undefined;
     if (projectRaw.type !== undefined) {
       const typeRaw = projectRaw.type;
-      if (typeof typeRaw !== 'string' || !(VALID_PROJECT_TYPES as readonly string[]).includes(typeRaw)) {
+      if (!isProjectType(typeRaw)) {
         fail(
           `${projectPath}.type`,
-          `次のいずれかである必要があります: ${VALID_PROJECT_TYPES.join(', ')}（実際の値: ${JSON.stringify(typeRaw)}）`,
-          [`type には ${VALID_PROJECT_TYPES.join(' / ')} のいずれかを指定してください`],
+          `次のいずれかである必要があります: ${PROJECT_TYPES.join(', ')}（実際の値: ${JSON.stringify(typeRaw)}）`,
+          [`type には ${PROJECT_TYPES.join(' / ')} のいずれかを指定してください`],
         );
       }
-      type = typeRaw as ProjectType;
+      type = typeRaw;
     }
 
     let ignore: readonly string[] | undefined;

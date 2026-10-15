@@ -18,7 +18,13 @@ export interface FileDiff {
   deleted: string[];
 }
 
-export type ProjectType = 'webapp' | 'addon' | 'bound' | 'standalone';
+export const PROJECT_TYPES = ['webapp', 'addon', 'bound', 'standalone'] as const;
+
+export type ProjectType = (typeof PROJECT_TYPES)[number];
+
+export function isProjectType(value: unknown): value is ProjectType {
+  return typeof value === 'string' && (PROJECT_TYPES as readonly string[]).includes(value);
+}
 
 export interface Deployment {
   deploymentId: string;

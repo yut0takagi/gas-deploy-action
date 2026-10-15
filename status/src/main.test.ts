@@ -1,7 +1,7 @@
 import type { DeploymentStatus } from '@gas-deploy/core';
 import { GasDeployError } from '@gas-deploy/core';
 import { describe, expect, it } from 'vitest';
-import { parseProjectsInput, resolveStatusTargets, toTargetResult } from './main.js';
+import { resolveStatusTargets, toTargetResult } from './main.js';
 
 const SHA = '6251c8c9f2a1b3d4e5f6a7b8c9d0e1f2a3b4c5d6';
 
@@ -20,20 +20,6 @@ projects:
       prod:
         scriptId: sheet-script
 `;
-
-describe('parseProjectsInput', () => {
-  it('treats all as the whole set', () => {
-    expect(parseProjectsInput('all')).toEqual(['all']);
-  });
-
-  it('splits a comma separated list and trims each name', () => {
-    expect(parseProjectsInput(' web-app , sheet-tools ')).toEqual(['web-app', 'sheet-tools']);
-  });
-
-  it('drops empty entries produced by a trailing comma', () => {
-    expect(parseProjectsInput('web-app,')).toEqual(['web-app']);
-  });
-});
 
 describe('toTargetResult', () => {
   const target = { project: 'web-app', environment: 'prod', scriptId: 's-1' };

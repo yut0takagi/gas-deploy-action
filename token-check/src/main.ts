@@ -1,21 +1,7 @@
 import * as core from '@actions/core';
-import { GasDeployError, type TokenHealth, checkTokenHealth, parseCredentials } from '@gas-deploy/core';
+import { parseBooleanInput, readCredentials } from '@gas-deploy/action-io';
+import { type TokenHealth, checkTokenHealth } from '@gas-deploy/core';
 import { renderTokenHealthSummary } from './summary.js';
-
-/** `core.getBooleanInput` の raw throw を、次の手順つきの `GasDeployError` に包み直す。 */
-function parseBooleanInput(name: string): boolean {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} には true または false を指定してください`, {
-      cause: error,
-      nextSteps: [
-        '現在の値は真偽値として解釈できません',
-        'GitHub Actions の式を使う場合は ${{ ... }} が true / false を返すか確認してください',
-      ],
-    });
-  }
-}
 
 export interface OutcomeOptions {
   failOnInvalid: boolean;
@@ -49,9 +35,7 @@ export async function run(): Promise<void> {
   const failOnUnknown = parseBooleanInput('fail-on-unknown');
   const scriptId = core.getInput('script-id');
 
-  const credentials = parseCredentials(core.getInput('credentials', { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
+  const credentials = readCredentials();
 
   // アクセストークンは core の内部で使われるだけで、ここには返らない。マスクする対象が
   // そもそも露出しないため、deploy / rollback のような setSecret は不要。

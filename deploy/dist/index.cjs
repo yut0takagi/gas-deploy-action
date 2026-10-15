@@ -19660,10 +19660,10 @@ var require_core = __commonJS({
       (0, command_1.issueCommand)("set-env", { name }, convertedVal);
     }
     exports2.exportVariable = exportVariable;
-    function setSecret2(secret) {
+    function setSecret3(secret) {
       (0, command_1.issueCommand)("add-mask", {}, secret);
     }
-    exports2.setSecret = setSecret2;
+    exports2.setSecret = setSecret3;
     function addPath(inputPath) {
       const filePath = process.env["GITHUB_PATH"] || "";
       if (filePath) {
@@ -19674,7 +19674,7 @@ var require_core = __commonJS({
       process.env["PATH"] = `${inputPath}${path.delimiter}${process.env["PATH"]}`;
     }
     exports2.addPath = addPath;
-    function getInput2(name, options) {
+    function getInput3(name, options) {
       const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
       if (options && options.required && !val) {
         throw new Error(`Input required and not supplied: ${name}`);
@@ -19684,9 +19684,9 @@ var require_core = __commonJS({
       }
       return val.trim();
     }
-    exports2.getInput = getInput2;
+    exports2.getInput = getInput3;
     function getMultilineInput(name, options) {
-      const inputs = getInput2(name, options).split("\n").filter((x) => x !== "");
+      const inputs = getInput3(name, options).split("\n").filter((x) => x !== "");
       if (options && options.trimWhitespace === false) {
         return inputs;
       }
@@ -19696,7 +19696,7 @@ var require_core = __commonJS({
     function getBooleanInput2(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
-      const val = getInput2(name, options);
+      const val = getInput3(name, options);
       if (trueValue.includes(val))
         return true;
       if (falseValue.includes(val))
@@ -19735,10 +19735,10 @@ Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
       (0, command_1.issueCommand)("error", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
     exports2.error = error;
-    function warning2(message, properties = {}) {
+    function warning3(message, properties = {}) {
       (0, command_1.issueCommand)("warning", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
-    exports2.warning = warning2;
+    exports2.warning = warning3;
     function notice(message, properties = {}) {
       (0, command_1.issueCommand)("notice", (0, utils_1.toCommandProperties)(properties), message instanceof Error ? message.toString() : message);
     }
@@ -23218,12 +23218,12 @@ var require_log = __commonJS({
       if (logLevel === "debug")
         console.log(...messages);
     }
-    function warn(logLevel, warning2) {
+    function warn(logLevel, warning3) {
       if (logLevel === "debug" || logLevel === "warn") {
         if (typeof node_process.emitWarning === "function")
-          node_process.emitWarning(warning2);
+          node_process.emitWarning(warning3);
         else
-          console.warn(warning2);
+          console.warn(warning3);
       }
     }
     exports2.debug = debug;
@@ -26692,9 +26692,9 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning2) => {
+        this.onError = (source, code, message, warning3) => {
           const pos = getErrorPos(source);
-          if (warning2)
+          if (warning3)
             this.warnings.push(new errors.YAMLWarning(pos, code, message));
           else
             this.errors.push(new errors.YAMLParseError(pos, code, message));
@@ -26767,10 +26767,10 @@ ${cb}` : comment;
           console.dir(token, { depth: null });
         switch (token.type) {
           case "directive":
-            this.directives.add(token.source, (offset, message, warning2) => {
+            this.directives.add(token.source, (offset, message, warning3) => {
               const pos = getErrorPos(token);
               pos[0] += offset;
-              this.onError(pos, "BAD_DIRECTIVE", message, warning2);
+              this.onError(pos, "BAD_DIRECTIVE", message, warning3);
             });
             this.prelude.push(token.source);
             this.atDirectives = true;
@@ -28812,7 +28812,7 @@ var require_public_api = __commonJS({
       const doc = parseDocument(src, options);
       if (!doc)
         return null;
-      doc.warnings.forEach((warning2) => log.warn(doc.options.logLevel, warning2));
+      doc.warnings.forEach((warning3) => log.warn(doc.options.logLevel, warning3));
       if (doc.errors.length > 0) {
         if (doc.options.logLevel !== "silent")
           throw doc.errors[0];
@@ -28902,8 +28902,14 @@ var require_dist = __commonJS({
   }
 });
 
-// deploy/src/index.ts
-var core2 = __toESM(require_core(), 1);
+// packages/action-io/src/index.ts
+var core = __toESM(require_core(), 1);
+
+// packages/core/src/types.ts
+var PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
+function isProjectType(value) {
+  return typeof value === "string" && PROJECT_TYPES.includes(value);
+}
 
 // packages/core/src/errors.ts
 var GasDeployError = class extends Error {
@@ -29782,7 +29788,6 @@ async function deploy(client, options) {
 // packages/core/src/config.ts
 var import_promises2 = require("node:fs/promises");
 var import_yaml = __toESM(require_dist(), 1);
-var VALID_PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
 function fail(path, message, nextSteps) {
   throw new GasDeployError(`${path}: ${message}`, { nextSteps });
 }
@@ -29889,11 +29894,11 @@ function parseConfig(yamlText) {
     let type;
     if (projectRaw.type !== void 0) {
       const typeRaw = projectRaw.type;
-      if (typeof typeRaw !== "string" || !VALID_PROJECT_TYPES.includes(typeRaw)) {
+      if (!isProjectType(typeRaw)) {
         fail(
           `${projectPath}.type`,
-          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${VALID_PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
-          [`type \u306B\u306F ${VALID_PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
+          `\u6B21\u306E\u3044\u305A\u308C\u304B\u3067\u3042\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059: ${PROJECT_TYPES.join(", ")}\uFF08\u5B9F\u969B\u306E\u5024: ${JSON.stringify(typeRaw)}\uFF09`,
+          [`type \u306B\u306F ${PROJECT_TYPES.join(" / ")} \u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`]
         );
       }
       type = typeRaw;
@@ -30214,10 +30219,64 @@ function buildVersionDescription(source, userDescription) {
   };
 }
 
+// packages/action-io/src/index.ts
+function parseBooleanInput(name) {
+  try {
+    return core.getBooleanInput(name);
+  } catch (error) {
+    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
+      cause: error,
+      nextSteps: [
+        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
+        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
+}
+function parseProjectsInput(raw) {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "all") {
+    return void 0;
+  }
+  return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
+}
+function readCredentials() {
+  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
+  core.setSecret(credentials.clientSecret);
+  core.setSecret(credentials.refreshToken);
+  return credentials;
+}
+async function authenticate(scriptIds = []) {
+  const credentials = readCredentials();
+  const { accessToken, warnings } = await preflight({ credentials, scriptIds });
+  core.setSecret(accessToken);
+  for (const warning3 of warnings) {
+    core.warning(warning3);
+  }
+  return accessToken;
+}
+async function readConfigInput() {
+  const configPath = core.getInput("config") || "gasdeploy.yml";
+  return readConfigFile(configPath, {
+    notFoundSteps: [
+      "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+      `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+    ]
+  });
+}
+function runAction(run2) {
+  void run2().catch((error) => {
+    if (error instanceof GasDeployError) {
+      core.setFailed(error.format());
+    } else {
+      core.setFailed(error instanceof Error ? error.message : String(error));
+    }
+  });
+}
+
 // deploy/src/main.ts
-var import_promises3 = require("node:fs/promises");
-var import_node_path2 = require("node:path");
-var core = __toESM(require_core(), 1);
+var core2 = __toESM(require_core(), 1);
 
 // deploy/src/comment.ts
 var API_BASE = "https://api.github.com";
@@ -30372,6 +30431,91 @@ ${content}`, marker);
   return { action: "created", id: created.id ?? 0 };
 }
 
+// deploy/src/github-context.ts
+var import_promises3 = require("node:fs/promises");
+async function readEventPayload(eventPath) {
+  try {
+    return JSON.parse(await (0, import_promises3.readFile)(eventPath, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+async function resolveProvenanceSource(env) {
+  const source = {};
+  const sha = env["GITHUB_SHA"];
+  if (sha) source.sha = sha;
+  const runId = env["GITHUB_RUN_ID"];
+  if (runId) source.runId = runId;
+  const actor = env["GITHUB_ACTOR"];
+  if (actor) source.actor = actor;
+  const eventPath = env["GITHUB_EVENT_PATH"];
+  if (eventPath) {
+    const payload = await readEventPayload(eventPath);
+    if (payload !== void 0) {
+      const pr = resolvePullRequestNumber(payload);
+      if (pr !== void 0) source.pr = pr;
+    }
+  }
+  return source;
+}
+async function resolvePrCommentContext(env) {
+  const repository = env["GITHUB_REPOSITORY"];
+  const eventPath = env["GITHUB_EVENT_PATH"];
+  if (!repository || !eventPath) {
+    return void 0;
+  }
+  const [owner, repo] = repository.split("/");
+  if (!owner || !repo) {
+    return void 0;
+  }
+  const payload = await readEventPayload(eventPath);
+  if (payload === void 0) {
+    return void 0;
+  }
+  const prNumber = resolvePullRequestNumber(payload);
+  if (prNumber === void 0) {
+    return void 0;
+  }
+  return { owner, repo, prNumber };
+}
+
+// deploy/src/outputs.ts
+function buildDeploymentsOutput(targets, multiResult) {
+  const completedByProject = new Map(multiResult.completed.map((entry) => [entry.project, entry]));
+  return targets.map((target) => {
+    const completedEntry = completedByProject.get(target.project);
+    if (completedEntry !== void 0) {
+      const entry = {
+        project: target.project,
+        environment: target.environment,
+        scriptId: target.scriptId,
+        status: completedEntry.result.changed ? "deployed" : "unchanged"
+      };
+      if (completedEntry.result.versionNumber !== void 0) entry.versionNumber = completedEntry.result.versionNumber;
+      if (completedEntry.result.previousVersionNumber !== void 0)
+        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
+      if (completedEntry.result.deploymentId !== void 0) entry.deploymentId = completedEntry.result.deploymentId;
+      if (completedEntry.result.webAppUrl !== void 0) entry.webAppUrl = completedEntry.result.webAppUrl;
+      return entry;
+    }
+    if (multiResult.failed !== void 0 && target.project === multiResult.failed.project) {
+      return {
+        project: target.project,
+        environment: target.environment,
+        scriptId: target.scriptId,
+        status: "failed",
+        error: multiResult.failed.error.message
+      };
+    }
+    return {
+      project: target.project,
+      environment: target.environment,
+      scriptId: target.scriptId,
+      status: "skipped"
+    };
+  });
+}
+
 // deploy/src/summary.ts
 function section(title, items) {
   if (items.length === 0) return [];
@@ -30413,7 +30557,7 @@ function renderSummary(result) {
   if (result.webAppUrl !== void 0) facts.push(`- Web \u30A2\u30D7\u30EA URL: ${result.webAppUrl}`);
   if (facts.length > 0) lines.push(...facts, "");
   if (result.warnings.length > 0) {
-    lines.push("### \u26A0\uFE0F \u8B66\u544A", "", ...result.warnings.map((warning2) => `- ${warning2}`), "");
+    lines.push("### \u26A0\uFE0F \u8B66\u544A", "", ...result.warnings.map((warning3) => `- ${warning3}`), "");
   }
   return lines.join("\n");
 }
@@ -30437,7 +30581,7 @@ function renderMultiSummary(result, targets) {
     if (entry.result.webAppUrl !== void 0) facts.push(`- Web \u30A2\u30D7\u30EA URL: ${entry.result.webAppUrl}`);
     if (facts.length > 0) lines.push(...facts, "");
     if (entry.result.warnings.length > 0) {
-      lines.push("#### \u26A0\uFE0F \u8B66\u544A", "", ...entry.result.warnings.map((warning2) => `- ${warning2}`), "");
+      lines.push("#### \u26A0\uFE0F \u8B66\u544A", "", ...entry.result.warnings.map((warning3) => `- ${warning3}`), "");
     }
   }
   if (result.failed) {
@@ -30464,53 +30608,16 @@ function renderMultiSummary(result, targets) {
   return lines.join("\n");
 }
 
-// deploy/src/main.ts
-var PROJECT_TYPES = ["webapp", "addon", "bound", "standalone"];
+// deploy/src/targets.ts
+var import_promises4 = require("node:fs/promises");
+var import_node_path2 = require("node:path");
 function parseProjectType(raw) {
-  if (PROJECT_TYPES.includes(raw)) {
+  if (isProjectType(raw)) {
     return raw;
   }
   throw new GasDeployError(`project-type \u306E\u5024\u304C\u4E0D\u6B63\u3067\u3059: ${raw}`, {
     nextSteps: [`\u6B21\u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${PROJECT_TYPES.join(" | ")}`]
   });
-}
-async function readEventPayload(eventPath) {
-  try {
-    return JSON.parse(await (0, import_promises3.readFile)(eventPath, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-async function resolveProvenanceSource(env) {
-  const source = {};
-  const sha = env["GITHUB_SHA"];
-  if (sha) source.sha = sha;
-  const runId = env["GITHUB_RUN_ID"];
-  if (runId) source.runId = runId;
-  const actor = env["GITHUB_ACTOR"];
-  if (actor) source.actor = actor;
-  const eventPath = env["GITHUB_EVENT_PATH"];
-  if (eventPath) {
-    const payload = await readEventPayload(eventPath);
-    if (payload !== void 0) {
-      const pr = resolvePullRequestNumber(payload);
-      if (pr !== void 0) source.pr = pr;
-    }
-  }
-  return source;
-}
-function parseBooleanInput(name) {
-  try {
-    return core.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
-      cause: error,
-      nextSteps: [
-        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
-        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
 }
 async function resolveIgnorePatterns(rootDir, rawInput) {
   const fromInput = parseClaspIgnore(rawInput);
@@ -30518,7 +30625,7 @@ async function resolveIgnorePatterns(rootDir, rawInput) {
     return fromInput;
   }
   try {
-    return parseClaspIgnore(await (0, import_promises3.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
+    return parseClaspIgnore(await (0, import_promises4.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") {
       return DEFAULT_IGNORE;
@@ -30532,13 +30639,6 @@ async function resolveIgnorePatterns(rootDir, rawInput) {
       ]
     });
   }
-}
-function parseProjectsInput(raw) {
-  const trimmed = raw.trim();
-  if (trimmed === "" || trimmed === "all") {
-    return void 0;
-  }
-  return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
 }
 async function resolveTargetIgnore(target, ignoreInput) {
   if (target.ignore.length > 0) {
@@ -30561,90 +30661,54 @@ async function buildDeployTargets(targets, options) {
   }
   return result;
 }
-function buildDeploymentsOutput(targets, multiResult) {
-  const completedByProject = new Map(multiResult.completed.map((entry) => [entry.project, entry]));
-  return targets.map((target) => {
-    const completedEntry = completedByProject.get(target.project);
-    if (completedEntry !== void 0) {
-      const entry = {
-        project: target.project,
-        environment: target.environment,
-        scriptId: target.scriptId,
-        status: completedEntry.result.changed ? "deployed" : "unchanged"
-      };
-      if (completedEntry.result.versionNumber !== void 0) entry.versionNumber = completedEntry.result.versionNumber;
-      if (completedEntry.result.previousVersionNumber !== void 0)
-        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
-      if (completedEntry.result.deploymentId !== void 0) entry.deploymentId = completedEntry.result.deploymentId;
-      if (completedEntry.result.webAppUrl !== void 0) entry.webAppUrl = completedEntry.result.webAppUrl;
-      return entry;
-    }
-    if (multiResult.failed !== void 0 && target.project === multiResult.failed.project) {
-      return {
-        project: target.project,
-        environment: target.environment,
-        scriptId: target.scriptId,
-        status: "failed",
-        error: multiResult.failed.error.message
-      };
-    }
-    return {
-      project: target.project,
-      environment: target.environment,
-      scriptId: target.scriptId,
-      status: "skipped"
-    };
-  });
-}
-async function resolvePrCommentContext(env) {
-  const repository = env["GITHUB_REPOSITORY"];
-  const eventPath = env["GITHUB_EVENT_PATH"];
-  if (!repository || !eventPath) {
-    return void 0;
+
+// deploy/src/main.ts
+async function readRunOptions() {
+  const dryRun = parseBooleanInput("dry-run");
+  const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
+  const commentOnPr = parseBooleanInput("comment-on-pr");
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, core2.getInput("description"));
+  for (const warning3 of versionDescription.warnings) {
+    core2.warning(warning3);
   }
-  const [owner, repo] = repository.split("/");
-  if (!owner || !repo) {
-    return void 0;
-  }
-  const payload = await readEventPayload(eventPath);
-  if (payload === void 0) {
-    return void 0;
-  }
-  const prNumber = resolvePullRequestNumber(payload);
-  if (prNumber === void 0) {
-    return void 0;
-  }
-  return { owner, repo, prNumber };
+  return { dryRun, createVersion, allowDelete, commentOnPr, description: versionDescription.description };
 }
 async function commentIfRequested(enabled, summary2, defaultKey) {
   if (!enabled) {
     return;
   }
-  const token = core.getInput("github-token");
+  const token = core2.getInput("github-token");
   if (!token) {
-    core.warning("comment-on-pr \u304C\u6709\u52B9\u3067\u3059\u304C github-token \u304C\u7A7A\u306E\u305F\u3081\u3001\u30B3\u30E1\u30F3\u30C8\u3092\u6295\u7A3F\u3057\u307E\u305B\u3093");
+    core2.warning("comment-on-pr \u304C\u6709\u52B9\u3067\u3059\u304C github-token \u304C\u7A7A\u306E\u305F\u3081\u3001\u30B3\u30E1\u30F3\u30C8\u3092\u6295\u7A3F\u3057\u307E\u305B\u3093");
     return;
   }
-  core.setSecret(token);
+  core2.setSecret(token);
   const context = await resolvePrCommentContext(process.env);
   if (context === void 0) {
-    core.info("PR \u306E\u5B9F\u884C\u3067\u306F\u306A\u3044\u305F\u3081\u3001\u30B3\u30E1\u30F3\u30C8\u306F\u6295\u7A3F\u3057\u307E\u305B\u3093");
+    core2.info("PR \u306E\u5B9F\u884C\u3067\u306F\u306A\u3044\u305F\u3081\u3001\u30B3\u30E1\u30F3\u30C8\u306F\u6295\u7A3F\u3057\u307E\u305B\u3093");
     return;
   }
-  const key = core.getInput("comment-key") || defaultKey;
+  const key = core2.getInput("comment-key") || defaultKey;
   try {
     const result = await upsertComment({ ...context, token }, key, summary2);
-    core.info(
+    core2.info(
       `PR #${context.prNumber} \u306E\u30B3\u30E1\u30F3\u30C8\u3092${result.action === "created" ? "\u4F5C\u6210" : "\u66F4\u65B0"}\u3057\u307E\u3057\u305F (id: ${result.id})`
     );
   } catch (error) {
-    core.warning(
+    core2.warning(
       `PR \u3078\u306E\u30B3\u30E1\u30F3\u30C8\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08\u30C7\u30D7\u30ED\u30A4\u81EA\u4F53\u306E\u7D50\u679C\u306F\u4E0A\u8A18\u306E\u3068\u304A\u308A\u3067\u3001\u3053\u306E\u5931\u6557\u306E\u5F71\u97FF\u3092\u53D7\u3051\u3066\u3044\u307E\u305B\u3093\uFF09: ${error instanceof GasDeployError ? error.format() : String(error)}`
     );
   }
 }
+async function publishSummary(summary2, commentOnPr, defaultCommentKey) {
+  core2.setOutput("summary", summary2);
+  await core2.summary.addRaw(summary2).write();
+  await commentIfRequested(commentOnPr, summary2, defaultCommentKey);
+}
 async function run() {
-  const scriptId = core.getInput("script-id");
+  const scriptId = core2.getInput("script-id");
   if (scriptId) {
     await runSingleProject(scriptId);
     return;
@@ -30652,54 +30716,35 @@ async function run() {
   await runMultiProject();
 }
 async function runSingleProject(scriptId) {
-  const rootDir = core.getInput("root-dir") || ".";
-  const deploymentId = core.getInput("deployment-id");
-  const descriptionInput = core.getInput("description");
-  const projectType = parseProjectType(core.getInput("project-type") || "standalone");
-  const dryRun = parseBooleanInput("dry-run");
-  const createVersion = parseBooleanInput("create-version");
-  const allowDelete = parseBooleanInput("allow-delete");
-  const commentOnPr = parseBooleanInput("comment-on-pr");
-  const ignore = await resolveIgnorePatterns(rootDir, core.getInput("ignore"));
-  const provenanceSource = await resolveProvenanceSource(process.env);
-  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
-  for (const warning2 of versionDescription.warnings) {
-    core.warning(warning2);
-  }
-  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
-  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds: [] });
-  core.setSecret(accessToken);
-  for (const warning2 of preflightWarnings) {
-    core.warning(warning2);
-  }
+  const rootDir = core2.getInput("root-dir") || ".";
+  const deploymentId = core2.getInput("deployment-id");
+  const projectType = parseProjectType(core2.getInput("project-type") || "standalone");
+  const options = await readRunOptions();
+  const ignore = await resolveIgnorePatterns(rootDir, core2.getInput("ignore"));
+  const accessToken = await authenticate();
   const result = await deploy(new AppsScriptClient(accessToken), {
     scriptId,
     rootDir,
     ignore,
     ...deploymentId ? { deploymentId } : {},
     projectType,
-    dryRun,
-    createVersion,
-    allowDelete,
-    description: versionDescription.description
+    dryRun: options.dryRun,
+    createVersion: options.createVersion,
+    allowDelete: options.allowDelete,
+    description: options.description
   });
-  for (const warning2 of result.warnings) {
-    core.warning(warning2);
+  for (const warning3 of result.warnings) {
+    core2.warning(warning3);
   }
-  const summary2 = renderSummary(result);
-  core.setOutput("changed", String(result.changed));
-  core.setOutput("version-number", result.versionNumber ?? "");
-  core.setOutput("previous-version-number", result.previousVersionNumber ?? "");
-  core.setOutput("deployment-id", result.deploymentId ?? "");
-  core.setOutput("web-app-url", result.webAppUrl ?? "");
-  core.setOutput("summary", summary2);
-  await core.summary.addRaw(summary2).write();
-  await commentIfRequested(commentOnPr, summary2, "default");
+  core2.setOutput("changed", String(result.changed));
+  core2.setOutput("version-number", result.versionNumber ?? "");
+  core2.setOutput("previous-version-number", result.previousVersionNumber ?? "");
+  core2.setOutput("deployment-id", result.deploymentId ?? "");
+  core2.setOutput("web-app-url", result.webAppUrl ?? "");
+  await publishSummary(renderSummary(result), options.commentOnPr, "default");
 }
 async function runMultiProject() {
-  const environment = core.getInput("environment");
+  const environment = core2.getInput("environment");
   if (!environment) {
     throw new GasDeployError("environment \u306E\u6307\u5B9A\u304C\u5FC5\u8981\u3067\u3059\uFF08\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u30E2\u30FC\u30C9\u3067\u306F\u5FC5\u9808\u3067\u3059\uFF09", {
       nextSteps: [
@@ -30708,68 +30753,34 @@ async function runMultiProject() {
       ]
     });
   }
-  const configPath = core.getInput("config") || "gasdeploy.yml";
-  const projects = parseProjectsInput(core.getInput("projects") || "all");
-  const yamlText = await readConfigFile(configPath, {
-    notFoundSteps: [
-      "\u5358\u4E00\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-      `\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F ${configPath} \u306B gasdeploy.yml \u5F62\u5F0F\u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-    ]
-  });
-  const config = parseConfig(yamlText);
+  const projects = parseProjectsInput(core2.getInput("projects"));
+  const config = parseConfig(await readConfigInput());
   const targets = resolveTargets(config, { environment, projects, env: process.env });
-  const dryRun = parseBooleanInput("dry-run");
-  const createVersion = parseBooleanInput("create-version");
-  const allowDelete = parseBooleanInput("allow-delete");
-  const commentOnPr = parseBooleanInput("comment-on-pr");
-  const descriptionInput = core.getInput("description");
-  const provenanceSource = await resolveProvenanceSource(process.env);
-  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
-  for (const warning2 of versionDescription.warnings) {
-    core.warning(warning2);
-  }
+  const options = await readRunOptions();
   const deployTargets = await buildDeployTargets(targets, {
-    ignoreInput: core.getInput("ignore"),
-    dryRun,
-    createVersion,
-    allowDelete,
-    description: versionDescription.description
+    ignoreInput: core2.getInput("ignore"),
+    dryRun: options.dryRun,
+    createVersion: options.createVersion,
+    allowDelete: options.allowDelete,
+    description: options.description
   });
-  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
   const scriptIds = [...new Set(targets.map((target) => target.scriptId))];
-  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds });
-  core.setSecret(accessToken);
-  for (const warning2 of preflightWarnings) {
-    core.warning(warning2);
-  }
-  core.info(`\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D: ${scriptIds.length} \u4EF6\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8AAD\u307F\u53D6\u308A\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F`);
+  const accessToken = await authenticate(scriptIds);
+  core2.info(`\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D: ${scriptIds.length} \u4EF6\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8AAD\u307F\u53D6\u308A\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F`);
   const client = new AppsScriptClient(accessToken);
   const multiResult = await deployAll(client, deployTargets);
   for (const entry of multiResult.completed) {
-    for (const warning2 of entry.result.warnings) {
-      core.warning(`[${entry.project}] ${warning2}`);
+    for (const warning3 of entry.result.warnings) {
+      core2.warning(`[${entry.project}] ${warning3}`);
     }
   }
-  const deployments = buildDeploymentsOutput(targets, multiResult);
-  const summary2 = renderMultiSummary(multiResult, targets);
-  core.setOutput("changed", String(multiResult.changed));
-  core.setOutput("deployments", JSON.stringify(deployments));
-  core.setOutput("summary", summary2);
-  await core.summary.addRaw(summary2).write();
-  await commentIfRequested(commentOnPr, summary2, environment);
+  core2.setOutput("changed", String(multiResult.changed));
+  core2.setOutput("deployments", JSON.stringify(buildDeploymentsOutput(targets, multiResult)));
+  await publishSummary(renderMultiSummary(multiResult, targets), options.commentOnPr, environment);
   if (multiResult.failed) {
-    core.setFailed(multiResult.failed.error.format());
+    core2.setFailed(multiResult.failed.error.format());
   }
 }
 
 // deploy/src/index.ts
-void run().catch((error) => {
-  if (error instanceof GasDeployError) {
-    core2.setFailed(error.format());
-  } else {
-    core2.setFailed(error instanceof Error ? error.message : String(error));
-  }
-});
+runAction(run);

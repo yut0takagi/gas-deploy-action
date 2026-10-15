@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./packages/action-io" },
     { "path": "./packages/setup-cli" },
     { "path": "./deploy" },
     { "path": "./rollback" },

@@ -1,13 +1,11 @@
 import * as core from '@actions/core';
+import { authenticate, parseProjectsInput, readConfigInput } from '@gas-deploy/action-io';
 import {
   AppsScriptClient,
   type DeploymentStatus,
   GasDeployError,
-  getAccessToken,
   getDeploymentStatus,
   parseConfig,
-  parseCredentials,
-  readConfigFile,
   resolveTargets,
 } from '@gas-deploy/core';
 import { renderStatusSummary } from './summary.js';
@@ -38,16 +36,10 @@ interface StatusTarget {
   deploymentId?: string;
 }
 
-export function parseProjectsInput(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((name) => name.trim())
-    .filter((name) => name.length > 0);
-}
-
 export interface ResolveStatusTargetsOptions {
   environment: string;
-  projects: readonly string[];
+  /** undefined は全プロジェクトを意味する。 */
+  projects: readonly string[] | undefined;
   /** 空文字列は「未指定」を意味する。 */
   deploymentIdInput: string;
   env: Record<string, string | undefined>;
@@ -65,7 +57,7 @@ export function resolveStatusTargets(yamlText: string, options: ResolveStatusTar
   const config = parseConfig(yamlText);
   const targets = resolveTargets(config, {
     environment: options.environment,
-    projects: [...options.projects],
+    ...(options.projects !== undefined ? { projects: [...options.projects] } : {}),
     env: options.env,
   });
 
@@ -156,25 +148,16 @@ export async function run(): Promise<void> {
         ],
       });
     }
-    const configPath = core.getInput('config') || 'gasdeploy.yml';
-    const projects = parseProjectsInput(core.getInput('projects') || 'all');
-    const yamlText = await readConfigFile(configPath, {
-      notFoundSteps: [
-        'scriptId を直接指定する場合は script-id 入力を使ってください',
-        `gasdeploy.yml を使う場合は ${configPath} に設定ファイルを作成してください`,
-        'config 入力で別のパスを指定している場合は、そのパスが正しいか確認してください',
-      ],
+    const projects = parseProjectsInput(core.getInput('projects'));
+    targets = resolveStatusTargets(await readConfigInput(), {
+      environment,
+      projects,
+      deploymentIdInput,
+      env: process.env,
     });
-    targets = resolveStatusTargets(yamlText, { environment, projects, deploymentIdInput, env: process.env });
   }
 
-  const credentials = parseCredentials(core.getInput('credentials', { required: true }));
-  core.setSecret(credentials.clientSecret);
-  core.setSecret(credentials.refreshToken);
-
-  const accessToken = await getAccessToken(credentials);
-  core.setSecret(accessToken);
-  const client = new AppsScriptClient(accessToken);
+  const client = new AppsScriptClient(await authenticate());
 
   // 全対象を試行してから返す。読み取りなので途中で止めると「調べたかったのに一部しか
   // 分からない」という最も困る結果になる。
