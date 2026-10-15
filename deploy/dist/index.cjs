@@ -19693,7 +19693,7 @@ var require_core = __commonJS({
       return inputs.map((input) => input.trim());
     }
     exports2.getMultilineInput = getMultilineInput;
-    function getBooleanInput3(name, options) {
+    function getBooleanInput2(name, options) {
       const trueValue = ["true", "True", "TRUE"];
       const falseValue = ["false", "False", "FALSE"];
       const val = getInput3(name, options);
@@ -19704,7 +19704,7 @@ var require_core = __commonJS({
       throw new TypeError(`Input does not meet YAML 1.2 "Core Schema" specification: ${name}
 Support boolean input list: \`true | True | TRUE | false | False | FALSE\``);
     }
-    exports2.getBooleanInput = getBooleanInput3;
+    exports2.getBooleanInput = getBooleanInput2;
     function setOutput2(name, value) {
       const filePath = process.env["GITHUB_OUTPUT"] || "";
       if (filePath) {
@@ -30220,6 +30220,51 @@ function buildVersionDescription(source, userDescription) {
 }
 
 // packages/action-io/src/index.ts
+function parseBooleanInput(name) {
+  try {
+    return core.getBooleanInput(name);
+  } catch (error) {
+    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
+      cause: error,
+      nextSteps: [
+        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
+        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+      ]
+    });
+  }
+}
+function parseProjectsInput(raw) {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "all") {
+    return void 0;
+  }
+  return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
+}
+function readCredentials() {
+  const credentials = parseCredentials(core.getInput("credentials", { required: true }));
+  core.setSecret(credentials.clientSecret);
+  core.setSecret(credentials.refreshToken);
+  return credentials;
+}
+async function authenticate(scriptIds = []) {
+  const credentials = readCredentials();
+  const { accessToken, warnings } = await preflight({ credentials, scriptIds });
+  core.setSecret(accessToken);
+  for (const warning3 of warnings) {
+    core.warning(warning3);
+  }
+  return accessToken;
+}
+async function readConfigInput() {
+  const configPath = core.getInput("config") || "gasdeploy.yml";
+  return readConfigFile(configPath, {
+    notFoundSteps: [
+      "scriptId \u3092\u76F4\u63A5\u6307\u5B9A\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
+      `gasdeploy.yml \u3092\u4F7F\u3046\u5834\u5408\u306F ${configPath} \u306B\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
+      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
+    ]
+  });
+}
 function runAction(run2) {
   void run2().catch((error) => {
     if (error instanceof GasDeployError) {
@@ -30231,8 +30276,6 @@ function runAction(run2) {
 }
 
 // deploy/src/main.ts
-var import_promises3 = require("node:fs/promises");
-var import_node_path2 = require("node:path");
 var core2 = __toESM(require_core(), 1);
 
 // deploy/src/comment.ts
@@ -30388,6 +30431,91 @@ ${content}`, marker);
   return { action: "created", id: created.id ?? 0 };
 }
 
+// deploy/src/github-context.ts
+var import_promises3 = require("node:fs/promises");
+async function readEventPayload(eventPath) {
+  try {
+    return JSON.parse(await (0, import_promises3.readFile)(eventPath, "utf8"));
+  } catch {
+    return void 0;
+  }
+}
+async function resolveProvenanceSource(env) {
+  const source = {};
+  const sha = env["GITHUB_SHA"];
+  if (sha) source.sha = sha;
+  const runId = env["GITHUB_RUN_ID"];
+  if (runId) source.runId = runId;
+  const actor = env["GITHUB_ACTOR"];
+  if (actor) source.actor = actor;
+  const eventPath = env["GITHUB_EVENT_PATH"];
+  if (eventPath) {
+    const payload = await readEventPayload(eventPath);
+    if (payload !== void 0) {
+      const pr = resolvePullRequestNumber(payload);
+      if (pr !== void 0) source.pr = pr;
+    }
+  }
+  return source;
+}
+async function resolvePrCommentContext(env) {
+  const repository = env["GITHUB_REPOSITORY"];
+  const eventPath = env["GITHUB_EVENT_PATH"];
+  if (!repository || !eventPath) {
+    return void 0;
+  }
+  const [owner, repo] = repository.split("/");
+  if (!owner || !repo) {
+    return void 0;
+  }
+  const payload = await readEventPayload(eventPath);
+  if (payload === void 0) {
+    return void 0;
+  }
+  const prNumber = resolvePullRequestNumber(payload);
+  if (prNumber === void 0) {
+    return void 0;
+  }
+  return { owner, repo, prNumber };
+}
+
+// deploy/src/outputs.ts
+function buildDeploymentsOutput(targets, multiResult) {
+  const completedByProject = new Map(multiResult.completed.map((entry) => [entry.project, entry]));
+  return targets.map((target) => {
+    const completedEntry = completedByProject.get(target.project);
+    if (completedEntry !== void 0) {
+      const entry = {
+        project: target.project,
+        environment: target.environment,
+        scriptId: target.scriptId,
+        status: completedEntry.result.changed ? "deployed" : "unchanged"
+      };
+      if (completedEntry.result.versionNumber !== void 0) entry.versionNumber = completedEntry.result.versionNumber;
+      if (completedEntry.result.previousVersionNumber !== void 0)
+        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
+      if (completedEntry.result.deploymentId !== void 0) entry.deploymentId = completedEntry.result.deploymentId;
+      if (completedEntry.result.webAppUrl !== void 0) entry.webAppUrl = completedEntry.result.webAppUrl;
+      return entry;
+    }
+    if (multiResult.failed !== void 0 && target.project === multiResult.failed.project) {
+      return {
+        project: target.project,
+        environment: target.environment,
+        scriptId: target.scriptId,
+        status: "failed",
+        error: multiResult.failed.error.message
+      };
+    }
+    return {
+      project: target.project,
+      environment: target.environment,
+      scriptId: target.scriptId,
+      status: "skipped"
+    };
+  });
+}
+
 // deploy/src/summary.ts
 function section(title, items) {
   if (items.length === 0) return [];
@@ -30480,53 +30608,16 @@ function renderMultiSummary(result, targets) {
   return lines.join("\n");
 }
 
-// deploy/src/main.ts
-var PROJECT_TYPES2 = ["webapp", "addon", "bound", "standalone"];
+// deploy/src/targets.ts
+var import_promises4 = require("node:fs/promises");
+var import_node_path2 = require("node:path");
 function parseProjectType(raw) {
-  if (PROJECT_TYPES2.includes(raw)) {
+  if (isProjectType(raw)) {
     return raw;
   }
   throw new GasDeployError(`project-type \u306E\u5024\u304C\u4E0D\u6B63\u3067\u3059: ${raw}`, {
-    nextSteps: [`\u6B21\u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${PROJECT_TYPES2.join(" | ")}`]
+    nextSteps: [`\u6B21\u306E\u3044\u305A\u308C\u304B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044: ${PROJECT_TYPES.join(" | ")}`]
   });
-}
-async function readEventPayload(eventPath) {
-  try {
-    return JSON.parse(await (0, import_promises3.readFile)(eventPath, "utf8"));
-  } catch {
-    return void 0;
-  }
-}
-async function resolveProvenanceSource(env) {
-  const source = {};
-  const sha = env["GITHUB_SHA"];
-  if (sha) source.sha = sha;
-  const runId = env["GITHUB_RUN_ID"];
-  if (runId) source.runId = runId;
-  const actor = env["GITHUB_ACTOR"];
-  if (actor) source.actor = actor;
-  const eventPath = env["GITHUB_EVENT_PATH"];
-  if (eventPath) {
-    const payload = await readEventPayload(eventPath);
-    if (payload !== void 0) {
-      const pr = resolvePullRequestNumber(payload);
-      if (pr !== void 0) source.pr = pr;
-    }
-  }
-  return source;
-}
-function parseBooleanInput(name) {
-  try {
-    return core2.getBooleanInput(name);
-  } catch (error) {
-    throw new GasDeployError(`${name} \u306B\u306F true \u307E\u305F\u306F false \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`, {
-      cause: error,
-      nextSteps: [
-        "\u73FE\u5728\u306E\u5024\u306F\u771F\u507D\u5024\u3068\u3057\u3066\u89E3\u91C8\u3067\u304D\u307E\u305B\u3093",
-        "GitHub Actions \u306E\u5F0F\u3092\u4F7F\u3046\u5834\u5408\u306F ${{ ... }} \u304C true / false \u3092\u8FD4\u3059\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-      ]
-    });
-  }
 }
 async function resolveIgnorePatterns(rootDir, rawInput) {
   const fromInput = parseClaspIgnore(rawInput);
@@ -30534,7 +30625,7 @@ async function resolveIgnorePatterns(rootDir, rawInput) {
     return fromInput;
   }
   try {
-    return parseClaspIgnore(await (0, import_promises3.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
+    return parseClaspIgnore(await (0, import_promises4.readFile)((0, import_node_path2.join)(rootDir, ".claspignore"), "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") {
       return DEFAULT_IGNORE;
@@ -30548,13 +30639,6 @@ async function resolveIgnorePatterns(rootDir, rawInput) {
       ]
     });
   }
-}
-function parseProjectsInput(raw) {
-  const trimmed = raw.trim();
-  if (trimmed === "" || trimmed === "all") {
-    return void 0;
-  }
-  return trimmed.split(",").map((name) => name.trim()).filter((name) => name.length > 0);
 }
 async function resolveTargetIgnore(target, ignoreInput) {
   if (target.ignore.length > 0) {
@@ -30577,60 +30661,19 @@ async function buildDeployTargets(targets, options) {
   }
   return result;
 }
-function buildDeploymentsOutput(targets, multiResult) {
-  const completedByProject = new Map(multiResult.completed.map((entry) => [entry.project, entry]));
-  return targets.map((target) => {
-    const completedEntry = completedByProject.get(target.project);
-    if (completedEntry !== void 0) {
-      const entry = {
-        project: target.project,
-        environment: target.environment,
-        scriptId: target.scriptId,
-        status: completedEntry.result.changed ? "deployed" : "unchanged"
-      };
-      if (completedEntry.result.versionNumber !== void 0) entry.versionNumber = completedEntry.result.versionNumber;
-      if (completedEntry.result.previousVersionNumber !== void 0)
-        entry.previousVersionNumber = completedEntry.result.previousVersionNumber;
-      if (completedEntry.result.deploymentId !== void 0) entry.deploymentId = completedEntry.result.deploymentId;
-      if (completedEntry.result.webAppUrl !== void 0) entry.webAppUrl = completedEntry.result.webAppUrl;
-      return entry;
-    }
-    if (multiResult.failed !== void 0 && target.project === multiResult.failed.project) {
-      return {
-        project: target.project,
-        environment: target.environment,
-        scriptId: target.scriptId,
-        status: "failed",
-        error: multiResult.failed.error.message
-      };
-    }
-    return {
-      project: target.project,
-      environment: target.environment,
-      scriptId: target.scriptId,
-      status: "skipped"
-    };
-  });
-}
-async function resolvePrCommentContext(env) {
-  const repository = env["GITHUB_REPOSITORY"];
-  const eventPath = env["GITHUB_EVENT_PATH"];
-  if (!repository || !eventPath) {
-    return void 0;
+
+// deploy/src/main.ts
+async function readRunOptions() {
+  const dryRun = parseBooleanInput("dry-run");
+  const createVersion = parseBooleanInput("create-version");
+  const allowDelete = parseBooleanInput("allow-delete");
+  const commentOnPr = parseBooleanInput("comment-on-pr");
+  const provenanceSource = await resolveProvenanceSource(process.env);
+  const versionDescription = buildVersionDescription(provenanceSource, core2.getInput("description"));
+  for (const warning3 of versionDescription.warnings) {
+    core2.warning(warning3);
   }
-  const [owner, repo] = repository.split("/");
-  if (!owner || !repo) {
-    return void 0;
-  }
-  const payload = await readEventPayload(eventPath);
-  if (payload === void 0) {
-    return void 0;
-  }
-  const prNumber = resolvePullRequestNumber(payload);
-  if (prNumber === void 0) {
-    return void 0;
-  }
-  return { owner, repo, prNumber };
+  return { dryRun, createVersion, allowDelete, commentOnPr, description: versionDescription.description };
 }
 async function commentIfRequested(enabled, summary2, defaultKey) {
   if (!enabled) {
@@ -30659,6 +30702,11 @@ async function commentIfRequested(enabled, summary2, defaultKey) {
     );
   }
 }
+async function publishSummary(summary2, commentOnPr, defaultCommentKey) {
+  core2.setOutput("summary", summary2);
+  await core2.summary.addRaw(summary2).write();
+  await commentIfRequested(commentOnPr, summary2, defaultCommentKey);
+}
 async function run() {
   const scriptId = core2.getInput("script-id");
   if (scriptId) {
@@ -30670,49 +30718,30 @@ async function run() {
 async function runSingleProject(scriptId) {
   const rootDir = core2.getInput("root-dir") || ".";
   const deploymentId = core2.getInput("deployment-id");
-  const descriptionInput = core2.getInput("description");
   const projectType = parseProjectType(core2.getInput("project-type") || "standalone");
-  const dryRun = parseBooleanInput("dry-run");
-  const createVersion = parseBooleanInput("create-version");
-  const allowDelete = parseBooleanInput("allow-delete");
-  const commentOnPr = parseBooleanInput("comment-on-pr");
+  const options = await readRunOptions();
   const ignore = await resolveIgnorePatterns(rootDir, core2.getInput("ignore"));
-  const provenanceSource = await resolveProvenanceSource(process.env);
-  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
-  for (const warning3 of versionDescription.warnings) {
-    core2.warning(warning3);
-  }
-  const credentials = parseCredentials(core2.getInput("credentials", { required: true }));
-  core2.setSecret(credentials.clientSecret);
-  core2.setSecret(credentials.refreshToken);
-  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds: [] });
-  core2.setSecret(accessToken);
-  for (const warning3 of preflightWarnings) {
-    core2.warning(warning3);
-  }
+  const accessToken = await authenticate();
   const result = await deploy(new AppsScriptClient(accessToken), {
     scriptId,
     rootDir,
     ignore,
     ...deploymentId ? { deploymentId } : {},
     projectType,
-    dryRun,
-    createVersion,
-    allowDelete,
-    description: versionDescription.description
+    dryRun: options.dryRun,
+    createVersion: options.createVersion,
+    allowDelete: options.allowDelete,
+    description: options.description
   });
   for (const warning3 of result.warnings) {
     core2.warning(warning3);
   }
-  const summary2 = renderSummary(result);
   core2.setOutput("changed", String(result.changed));
   core2.setOutput("version-number", result.versionNumber ?? "");
   core2.setOutput("previous-version-number", result.previousVersionNumber ?? "");
   core2.setOutput("deployment-id", result.deploymentId ?? "");
   core2.setOutput("web-app-url", result.webAppUrl ?? "");
-  core2.setOutput("summary", summary2);
-  await core2.summary.addRaw(summary2).write();
-  await commentIfRequested(commentOnPr, summary2, "default");
+  await publishSummary(renderSummary(result), options.commentOnPr, "default");
 }
 async function runMultiProject() {
   const environment = core2.getInput("environment");
@@ -30724,43 +30753,19 @@ async function runMultiProject() {
       ]
     });
   }
-  const configPath = core2.getInput("config") || "gasdeploy.yml";
-  const projects = parseProjectsInput(core2.getInput("projects") || "all");
-  const yamlText = await readConfigFile(configPath, {
-    notFoundSteps: [
-      "\u5358\u4E00\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F script-id \u5165\u529B\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044",
-      `\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u3068\u3057\u3066\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u5834\u5408\u306F ${configPath} \u306B gasdeploy.yml \u5F62\u5F0F\u306E\u8A2D\u5B9A\u30D5\u30A1\u30A4\u30EB\u3092\u4F5C\u6210\u3057\u3066\u304F\u3060\u3055\u3044`,
-      "config \u5165\u529B\u3067\u5225\u306E\u30D1\u30B9\u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u30D1\u30B9\u304C\u6B63\u3057\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044"
-    ]
-  });
-  const config = parseConfig(yamlText);
+  const projects = parseProjectsInput(core2.getInput("projects"));
+  const config = parseConfig(await readConfigInput());
   const targets = resolveTargets(config, { environment, projects, env: process.env });
-  const dryRun = parseBooleanInput("dry-run");
-  const createVersion = parseBooleanInput("create-version");
-  const allowDelete = parseBooleanInput("allow-delete");
-  const commentOnPr = parseBooleanInput("comment-on-pr");
-  const descriptionInput = core2.getInput("description");
-  const provenanceSource = await resolveProvenanceSource(process.env);
-  const versionDescription = buildVersionDescription(provenanceSource, descriptionInput);
-  for (const warning3 of versionDescription.warnings) {
-    core2.warning(warning3);
-  }
+  const options = await readRunOptions();
   const deployTargets = await buildDeployTargets(targets, {
     ignoreInput: core2.getInput("ignore"),
-    dryRun,
-    createVersion,
-    allowDelete,
-    description: versionDescription.description
+    dryRun: options.dryRun,
+    createVersion: options.createVersion,
+    allowDelete: options.allowDelete,
+    description: options.description
   });
-  const credentials = parseCredentials(core2.getInput("credentials", { required: true }));
-  core2.setSecret(credentials.clientSecret);
-  core2.setSecret(credentials.refreshToken);
   const scriptIds = [...new Set(targets.map((target) => target.scriptId))];
-  const { accessToken, warnings: preflightWarnings } = await preflight({ credentials, scriptIds });
-  core2.setSecret(accessToken);
-  for (const warning3 of preflightWarnings) {
-    core2.warning(warning3);
-  }
+  const accessToken = await authenticate(scriptIds);
   core2.info(`\u30C7\u30D7\u30ED\u30A4\u524D\u306E\u78BA\u8A8D: ${scriptIds.length} \u4EF6\u306E\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\u306E\u8AAD\u307F\u53D6\u308A\u6A29\u9650\u3092\u78BA\u8A8D\u3057\u307E\u3057\u305F`);
   const client = new AppsScriptClient(accessToken);
   const multiResult = await deployAll(client, deployTargets);
@@ -30769,13 +30774,9 @@ async function runMultiProject() {
       core2.warning(`[${entry.project}] ${warning3}`);
     }
   }
-  const deployments = buildDeploymentsOutput(targets, multiResult);
-  const summary2 = renderMultiSummary(multiResult, targets);
   core2.setOutput("changed", String(multiResult.changed));
-  core2.setOutput("deployments", JSON.stringify(deployments));
-  core2.setOutput("summary", summary2);
-  await core2.summary.addRaw(summary2).write();
-  await commentIfRequested(commentOnPr, summary2, environment);
+  core2.setOutput("deployments", JSON.stringify(buildDeploymentsOutput(targets, multiResult)));
+  await publishSummary(renderMultiSummary(multiResult, targets), options.commentOnPr, environment);
   if (multiResult.failed) {
     core2.setFailed(multiResult.failed.error.format());
   }
