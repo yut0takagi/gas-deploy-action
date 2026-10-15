@@ -42,6 +42,16 @@ describe('AppsScriptClient.getContent', () => {
   });
 });
 
+describe('AppsScriptClient.getContent with a version', () => {
+  it('reads the snapshot of the given version', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 200, body: '{}' }]);
+    await client.getContent(SCRIPT_ID, 12);
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://script.googleapis.com/v1/projects/script-abc/content?versionNumber=12');
+  });
+});
+
 describe('AppsScriptClient.getProject', () => {
   // /content ではなくメタデータの側を叩くのが要点。デプロイ前の権限確認で
   // /content を使うと、直後の deploy が同じソースをもう一度落とすことになる。

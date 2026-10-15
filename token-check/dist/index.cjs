@@ -27471,8 +27471,8 @@ var PARSE_FAILURE_NEXT_STEPS2 = [
 ];
 var OUTCOME_UNKNOWN_NEXT_STEPS = [
   "\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u3092\u78BA\u8A8D\u3057\u3001\u610F\u56F3\u3057\u306A\u3044\u30D0\u30FC\u30B8\u30E7\u30F3\u3084\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-  "HEAD \u306E\u66F4\u65B0\u306F\u5B8C\u4E86\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\u305D\u306E\u5834\u5408\u3001\u518D\u5B9F\u884C\u3057\u3066\u3082\u5DEE\u5206\u30BC\u30ED\u3068\u5224\u5B9A\u3055\u308C\u3066\u30B9\u30AD\u30C3\u30D7\u3055\u308C\u308B\u305F\u3081\u3001\u30C7\u30D7\u30ED\u30A4\u304C\u53E4\u3044\u307E\u307E\u306B\u306A\u308A\u307E\u3059",
-  "\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u305F\u3046\u3048\u3067\u3001\u5FC5\u8981\u306A\u3089\u30C7\u30D7\u30ED\u30A4\u3092\u624B\u52D5\u3067\u4F5C\u6210\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
+  "deployment-id \u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u307E\u307E\u518D\u5B9F\u884C\u3059\u308C\u3070\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u4F5C\u6210\u3068\u30C7\u30D7\u30ED\u30A4\u306E\u66F4\u65B0\u3060\u3051\u304C\u3084\u308A\u76F4\u3055\u308C\u307E\u3059",
+  "deployment-id \u3092\u6307\u5B9A\u3057\u3066\u3044\u306A\u3044\u5834\u5408\u306F\u3001HEAD \u304C\u66F4\u65B0\u6E08\u307F\u3060\u3068\u518D\u5B9F\u884C\u3057\u3066\u3082\u5DEE\u5206\u30BC\u30ED\u3068\u5224\u5B9A\u3055\u308C\u3066\u30B9\u30AD\u30C3\u30D7\u3055\u308C\u307E\u3059\u3002\u305D\u306E\u5834\u5408\u306F\u30C7\u30D7\u30ED\u30A4\u3092\u624B\u52D5\u3067\u4F5C\u6210\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
 function toDeployment(raw) {
   const webAppUrl = raw.entryPoints?.find((entry) => entry.entryPointType === "WEB_APP")?.webApp?.url;
@@ -27627,8 +27627,10 @@ var AppsScriptClient = class {
   async getProject(scriptId) {
     await this.request("GET", `/projects/${encodePathSegment(scriptId)}`);
   }
-  async getContent(scriptId) {
-    const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content`);
+  /** `versionNumber` を省略すると HEAD を、指定するとそのバージョンのスナップショットを返す。 */
+  async getContent(scriptId, versionNumber) {
+    const query = versionNumber === void 0 ? "" : `?${new URLSearchParams({ versionNumber: String(versionNumber) })}`;
+    const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content${query}`);
     return result.files ?? [];
   }
   async updateContent(scriptId, files) {

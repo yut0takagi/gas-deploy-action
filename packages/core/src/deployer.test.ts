@@ -361,3 +361,144 @@ describe('deploy の previousVersionNumber', () => {
     expect(client.getDeployment).not.toHaveBeenCalled();
   });
 });
+
+describe('deploy when HEAD has no diff but the deployment may be behind', () => {
+  const HEAD: ScriptFile[] = [
+    { name: 'Code', type: 'SERVER_JS', source: 'function main() {}' },
+    { name: 'appsscript', type: 'JSON', source: MANIFEST },
+  ];
+  const OLD: ScriptFile[] = [
+    { name: 'Code', type: 'SERVER_JS', source: 'function old() {}' },
+    { name: 'appsscript', type: 'JSON', source: MANIFEST },
+  ];
+  const CI_DESCRIPTION = 'gas-deploy sha=aaaaaaa';
+
+  /** HEAD は makeProject() と同じ内容。デプロイは v6 を指し、v6 の中身は `deployed`。 */
+  function headClient(options: { deployed: ScriptFile[]; deploymentDescription?: string; versionDescription?: string }) {
+    const deployment: Deployment = { deploymentId: 'dep-1', versionNumber: 6 };
+    if (options.deploymentDescription !== undefined) deployment.description = options.deploymentDescription;
+    return fakeClient({
+      getContent: vi.fn(async (_scriptId: string, versionNumber?: number) =>
+        versionNumber === undefined ? HEAD : options.deployed,
+      ),
+      getDeployment: vi.fn(async () => deployment),
+      getVersion: vi.fn(async () =>
+        options.versionDescription === undefined
+          ? { versionNumber: 6 }
+          : { versionNumber: 6, description: options.versionDescription },
+      ),
+    });
+  }
+
+  function withDeployment(rootDir: string) {
+    return { ...baseOptions(rootDir), deploymentId: 'dep-1' };
+  }
+
+  it('does not look at the deployment when no deployment-id is given', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({ deployed: OLD });
+
+    const result = await deploy(client, baseOptions(rootDir));
+
+    expect(result.changed).toBe(false);
+    expect(client.getDeployment).not.toHaveBeenCalled();
+    expect(client.getContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not look at the deployment when versions are not created', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({ deployed: OLD });
+
+    const result = await deploy(client, { ...withDeployment(rootDir), createVersion: false });
+
+    expect(result.changed).toBe(false);
+    expect(client.getDeployment).not.toHaveBeenCalled();
+  });
+
+  it('reports unchanged when the deployed version already matches HEAD', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({ deployed: HEAD });
+
+    const result = await deploy(client, withDeployment(rootDir));
+
+    expect(result.changed).toBe(false);
+    expect(result.warnings).toEqual([]);
+    expect(client.getContent).toHaveBeenCalledWith('script-abc', 6);
+    expect(client.createVersion).not.toHaveBeenCalled();
+  });
+
+  it('creates a version and repoints the deployment when the previous run stopped after updateContent', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({
+      deployed: OLD,
+      deploymentDescription: CI_DESCRIPTION,
+      versionDescription: CI_DESCRIPTION,
+    });
+
+    const result = await deploy(client, withDeployment(rootDir));
+
+    expect(client.updateContent).not.toHaveBeenCalled();
+    expect(client.createVersion).toHaveBeenCalledWith('script-abc', 'ci-abc1234-5');
+    expect(client.updateDeployment).toHaveBeenCalledWith('script-abc', 'dep-1', 7, 'ci-abc1234-5');
+    expect(result).toMatchObject({ changed: true, resumed: true, versionNumber: 7, previousVersionNumber: 6 });
+    expect(result.diff).toEqual({ added: [], modified: [], deleted: [] });
+    expect(result.warnings.some((warning) => warning.includes('前回の実行'))).toBe(true);
+  });
+
+  // rollback 直後の HEAD には問題のコードが残っている。ここで出し直すと、
+  // 無関係な push でロールバックが静かに巻き戻る。
+  it('leaves a deployment that was repointed by rollback alone', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({
+      deployed: OLD,
+      deploymentDescription: 'rollback to v6 (was v7)',
+      versionDescription: CI_DESCRIPTION,
+    });
+
+    const result = await deploy(client, withDeployment(rootDir));
+
+    expect(result.changed).toBe(false);
+    expect(result.resumed).toBeUndefined();
+    expect(client.createVersion).not.toHaveBeenCalled();
+    expect(client.updateDeployment).not.toHaveBeenCalled();
+    expect(result.warnings.some((warning) => warning.includes('意図的に指し直された'))).toBe(true);
+  });
+
+  it('treats a deployment without a description as not managed by this action', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({ deployed: OLD });
+
+    const result = await deploy(client, withDeployment(rootDir));
+
+    expect(result.changed).toBe(false);
+    expect(client.createVersion).not.toHaveBeenCalled();
+  });
+
+  it('reports what it would do on dry-run without writing', async () => {
+    const rootDir = await makeProject();
+    const client = headClient({
+      deployed: OLD,
+      deploymentDescription: CI_DESCRIPTION,
+      versionDescription: CI_DESCRIPTION,
+    });
+
+    const result = await deploy(client, { ...withDeployment(rootDir), dryRun: true });
+
+    expect(result).toMatchObject({ changed: true, resumed: true });
+    expect(client.createVersion).not.toHaveBeenCalled();
+    expect(client.updateDeployment).not.toHaveBeenCalled();
+  });
+
+  it('treats an @HEAD deployment as always in sync', async () => {
+    const rootDir = await makeProject();
+    const client = fakeClient({
+      getContent: vi.fn(async () => HEAD),
+      getDeployment: vi.fn(async (): Promise<Deployment> => ({ deploymentId: 'dep-head' })),
+    });
+
+    const result = await deploy(client, withDeployment(rootDir));
+
+    expect(result.changed).toBe(false);
+    expect(client.getContent).toHaveBeenCalledTimes(1);
+  });
+});

@@ -23,11 +23,17 @@ function deletionNotice(deleted: string[]): string[] {
   ];
 }
 
+/** dry-run でも本番でも読めるよう、「行った」ではなく「行う」と書く。 */
+const RESUMED_NOTICE =
+  'ファイルの差分はありません。HEAD がデプロイに反映されていなかったため、バージョンの作成とデプロイの更新だけを行います。';
+
 export function renderSummary(result: DeployResult): string {
   const lines: string[] = ['## GAS デプロイ結果', ''];
 
   if (!result.changed) {
     lines.push('差分がないため、変更はありません。', '');
+  } else if (result.resumed) {
+    lines.push(RESUMED_NOTICE, '');
   } else {
     lines.push(
       ...deletionNotice(result.diff.deleted),
@@ -68,7 +74,10 @@ export function renderMultiSummary(result: MultiDeployResult, targets: readonly 
 
   for (const entry of result.completed) {
     lines.push(`### ${entry.project} (${entry.environment})`, '');
-    lines.push(entry.result.changed ? '変更あり' : '差分がないため、変更はありません。', '');
+    lines.push(
+      !entry.result.changed ? '差分がないため、変更はありません。' : entry.result.resumed ? RESUMED_NOTICE : '変更あり',
+      '',
+    );
     if (entry.result.changed) {
       lines.push(...deletionNotice(entry.result.diff.deleted));
     }

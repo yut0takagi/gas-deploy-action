@@ -13,6 +13,20 @@ describe('renderSummary', () => {
     expect(text).toContain('変更はありません');
   });
 
+  // 差分ゼロのまま新しいバージョンが出るので、「追加 0 / 変更 0 / 削除 0」だけでは何が起きたか読めない。
+  it('explains a run that only created a version because HEAD was not deployed', () => {
+    const text = renderSummary({
+      changed: true,
+      resumed: true,
+      diff: { added: [], modified: [], deleted: [] },
+      warnings: [],
+      versionNumber: 8,
+    });
+    expect(text).toContain('HEAD がデプロイに反映されていなかった');
+    expect(text).not.toContain('追加: 0');
+    expect(text).toContain('`8`');
+  });
+
   it('lists added, modified and deleted files', () => {
     const text = renderSummary({
       changed: true,

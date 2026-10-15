@@ -52,8 +52,8 @@ const PARSE_FAILURE_NEXT_STEPS = [
 
 const OUTCOME_UNKNOWN_NEXT_STEPS = [
   'デプロイ一覧を確認し、意図しないバージョンやデプロイが作成されていないか確認してください',
-  'HEAD の更新は完了している可能性があります。その場合、再実行しても差分ゼロと判定されてスキップされるため、デプロイが古いままになります',
-  '状態を確認したうえで、必要ならデプロイを手動で作成し直してください',
+  'deployment-id を指定している場合は、そのまま再実行すればバージョンの作成とデプロイの更新だけがやり直されます',
+  'deployment-id を指定していない場合は、HEAD が更新済みだと再実行しても差分ゼロと判定されてスキップされます。その場合はデプロイを手動で作成し直してください',
 ];
 
 type HttpMethod = 'GET' | 'PUT' | 'POST';
@@ -265,8 +265,10 @@ export class AppsScriptClient {
     await this.request('GET', `/projects/${encodePathSegment(scriptId)}`);
   }
 
-  async getContent(scriptId: string): Promise<ScriptFile[]> {
-    const result = (await this.request('GET', `/projects/${encodePathSegment(scriptId)}/content`)) as {
+  /** `versionNumber` を省略すると HEAD を、指定するとそのバージョンのスナップショットを返す。 */
+  async getContent(scriptId: string, versionNumber?: number): Promise<ScriptFile[]> {
+    const query = versionNumber === undefined ? '' : `?${new URLSearchParams({ versionNumber: String(versionNumber) })}`;
+    const result = (await this.request('GET', `/projects/${encodePathSegment(scriptId)}/content${query}`)) as {
       files?: ScriptFile[];
     };
     return result.files ?? [];
