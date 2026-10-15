@@ -1,7 +1,7 @@
 /**
  * 実 GAS に対する E2E 検証（テスト戦略レベル4）。
  *
- * push → getContent 検証 → デプロイ → ロールバック → 後片付け を実 API に通す。
+ * push → getContent 検証 → デプロイ → 再実行 → ロールバック → 再実行 → 後片付け を実 API に通す。
  * モックでは絶対に捕まらない種類の破綻（clasp 互換の崩れ、API 仕様の変更、スコープの
  * 不足、読み取り一貫性の悪化）を検出するのが目的である。
  *
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     // .claspignore 互換の除外が実 API 経路でも効くことを確認するための、除外されるべきファイル。
     await writeFile(join(rootDir, 'Skipped.test.js'), 'function shouldNotBeUploaded() {}\n', 'utf8');
 
-    const deployResult = await deploy(client, {
+    const deployOptions = {
       scriptId,
       rootDir,
       ignore: ['**/*.test.js'],
@@ -119,7 +119,8 @@ async function main(): Promise<void> {
       dryRun: false,
       createVersion: true,
       description: marker,
-    });
+    };
+    const deployResult = await deploy(client, deployOptions);
 
     assert(deployResult.changed, 'デプロイが差分を検出しました');
     assert(deployResult.versionNumber !== undefined, `バージョン v${deployResult.versionNumber} を作成しました`);
@@ -138,6 +139,13 @@ async function main(): Promise<void> {
       'ignore パターンに一致するファイルはアップロードされていません',
     );
 
+    // 差分ゼロの実行は、デプロイが指すバージョンの内容を HEAD と比べる。バージョンの
+    // スナップショットが HEAD と同じ形で返らなければ、毎回バージョンを作り続けることになる。
+    // 収束を待ってから比べる（古い読み取りに当たると、ずれていると誤認する）。
+    await waitForDeploymentVersion(client, scriptId, deploymentId, deployResult.versionNumber as number);
+    const rerunResult = await deploy(client, deployOptions);
+    assert(!rerunResult.changed, '直後の再実行は差分なしで終わり、バージョンを作りませんでした');
+
     const target = deployResult.previousVersionNumber as number;
     const rollbackResult = await rollback(client, {
       scriptId,
@@ -155,6 +163,14 @@ async function main(): Promise<void> {
       afterRollback.some((file) => file.name === 'Code' && file.source.includes(marker)),
       'ロールバックしても HEAD は戻らない（仕様どおりの挙動）ことを確認しました',
     );
+
+    // HEAD は戻っていないので、デプロイとはずれている。それでもロールバックを巻き戻さないこと。
+    const afterRollbackRerun = await deploy(client, deployOptions);
+    assert(
+      !afterRollbackRerun.changed && afterRollbackRerun.resumed === undefined,
+      'ロールバック後の再実行はデプロイを書き換えませんでした',
+    );
+    await waitForDeploymentVersion(client, scriptId, deploymentId, target);
 
     await client.updateContent(scriptId, original);
     restored = true;

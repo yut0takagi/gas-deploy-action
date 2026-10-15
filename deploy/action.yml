@@ -76,7 +76,9 @@ inputs:
 
 outputs:
   changed:
-    description: '差分があったかどうか（true / false）'
+    description: >-
+      デプロイの内容が変わったかどうか（true / false）。ファイルの差分が無くても、
+      前回の実行で反映されなかった HEAD をデプロイした場合は true になります。
   version-number:
     description: '作成されたバージョン番号（単一プロジェクトモードのみ）'
   previous-version-number:

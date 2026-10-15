@@ -29073,6 +29073,7 @@ function parseCredentials(raw) {
 
 // packages/core/src/auth.ts
 var TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+var TOKEN_TIMEOUT_MS = 3e4;
 var EXPIRY_NEXT_STEPS = [
   "OAuth \u540C\u610F\u753B\u9762\u304C\u300C\u30C6\u30B9\u30C8\u300D\u72B6\u614B\u306E\u5834\u5408\u3001refresh token \u306F7\u65E5\u3067\u5931\u52B9\u3057\u307E\u3059\u3002\u300C\u672C\u756A\u300D\uFF08\u500B\u4EBA\u30A2\u30AB\u30A6\u30F3\u30C8\uFF09\u307E\u305F\u306F\u300C\u5185\u90E8\u300D\uFF08Workspace\uFF09\u306B\u5909\u66F4\u3057\u3066\u304F\u3060\u3055\u3044",
   "Google Workspace \u306E\u518D\u8A8D\u8A3C\u30DD\u30EA\u30B7\u30FC\u304C\u6709\u52B9\u306A\u5834\u5408\u3001`invalid_rapt` \u30A8\u30E9\u30FC\u3068\u3068\u3082\u306B\u5B9A\u671F\u7684\u306B\u5931\u52B9\u3057\u307E\u3059\u3002\u7121\u4EBA\u5B9F\u884C\u306B\u306F\u518D\u8A8D\u8A3C\u3092\u8981\u6C42\u3055\u308C\u306A\u3044\u5C02\u7528\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044",
@@ -29119,7 +29120,8 @@ async function exchangeToken(credentials, fetchImpl = fetch) {
     response = await fetchImpl(TOKEN_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body
+      body,
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS)
     });
   } catch (cause) {
     throw new GasDeployError("\u30C8\u30FC\u30AF\u30F3\u30A8\u30F3\u30C9\u30DD\u30A4\u30F3\u30C8\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
@@ -29371,6 +29373,16 @@ function hasChanges(diff) {
 var BASE_URL = "https://script.googleapis.com/v1";
 var MANIFEST_FILE_NAME = "appsscript";
 var DEFAULT_MAX_RETRIES = 3;
+var DEFAULT_TIMEOUT_MS = 6e4;
+var MAX_RETRY_AFTER_MS = 6e4;
+var PRE_SEND_ERROR_CODES = /* @__PURE__ */ new Set([
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT"
+]);
 var DEPLOYMENTS_PAGE_SIZE = 50;
 var MAX_DEPLOYMENT_PAGES = 20;
 var CONNECTIVITY_NEXT_STEPS2 = [
@@ -29381,6 +29393,11 @@ var CONNECTIVITY_NEXT_STEPS2 = [
 var PARSE_FAILURE_NEXT_STEPS2 = [
   "\u30D7\u30ED\u30AD\u30B7\u3084\u30D5\u30A1\u30A4\u30A2\u30A6\u30A9\u30FC\u30EB\u304C\u5FDC\u7B54\u3092\u66F8\u304D\u63DB\u3048\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
   "\u4E00\u6642\u7684\u306A\u969C\u5BB3\u306E\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\u3057\u3070\u3089\u304F\u5F85\u3063\u3066\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044"
+];
+var OUTCOME_UNKNOWN_NEXT_STEPS = [
+  "\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u3092\u78BA\u8A8D\u3057\u3001\u610F\u56F3\u3057\u306A\u3044\u30D0\u30FC\u30B8\u30E7\u30F3\u3084\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
+  "deployment-id \u3092\u6307\u5B9A\u3057\u3066\u3044\u308B\u5834\u5408\u306F\u3001\u305D\u306E\u307E\u307E\u518D\u5B9F\u884C\u3059\u308C\u3070\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u4F5C\u6210\u3068\u30C7\u30D7\u30ED\u30A4\u306E\u66F4\u65B0\u3060\u3051\u304C\u3084\u308A\u76F4\u3055\u308C\u307E\u3059",
+  "deployment-id \u3092\u6307\u5B9A\u3057\u3066\u3044\u306A\u3044\u5834\u5408\u306F\u3001HEAD \u304C\u66F4\u65B0\u6E08\u307F\u3060\u3068\u518D\u5B9F\u884C\u3057\u3066\u3082\u5DEE\u5206\u30BC\u30ED\u3068\u5224\u5B9A\u3055\u308C\u3066\u30B9\u30AD\u30C3\u30D7\u3055\u308C\u307E\u3059\u3002\u305D\u306E\u5834\u5408\u306F\u30C7\u30D7\u30ED\u30A4\u3092\u624B\u52D5\u3067\u4F5C\u6210\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
 ];
 function toDeployment(raw) {
   const webAppUrl = raw.entryPoints?.find((entry) => entry.entryPointType === "WEB_APP")?.webApp?.url;
@@ -29396,11 +29413,21 @@ function toDeployment(raw) {
   }
   return deployment;
 }
-function isRetryable(method, status) {
-  if (status === 429) {
-    return true;
+function failedBeforeSend(cause) {
+  const code = cause?.cause?.code;
+  return typeof code === "string" && PRE_SEND_ERROR_CODES.has(code);
+}
+function parseRetryAfter(header) {
+  if (header === null || !/^\d+$/.test(header.trim())) {
+    return void 0;
   }
-  return status >= 500 && method !== "POST";
+  return Math.min(Number(header.trim()) * 1e3, MAX_RETRY_AFTER_MS);
+}
+function outcomeUnknownError(reason, details) {
+  return new GasDeployError(`${reason}\u3002\u30B5\u30FC\u30D0\u5074\u3067\u51E6\u7406\u304C\u5B8C\u4E86\u3057\u305F\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059`, {
+    ...details,
+    nextSteps: OUTCOME_UNKNOWN_NEXT_STEPS
+  });
 }
 function encodePathSegment(value) {
   return encodeURIComponent(value);
@@ -29411,80 +29438,109 @@ var AppsScriptClient = class {
     this.fetchImpl = options.fetch ?? fetch;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
   fetchImpl;
   maxRetries;
   sleep;
+  timeoutMs;
   async request(method, path, body) {
-    let lastError;
-    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
-      let response;
-      try {
-        response = await this.fetchImpl(`${BASE_URL}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: body === void 0 ? void 0 : JSON.stringify(body)
-        });
-      } catch (cause) {
-        lastError = new GasDeployError("Apps Script API \u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
-          cause,
-          nextSteps: CONNECTIVITY_NEXT_STEPS2
-        });
-        if (attempt < this.maxRetries) {
-          await this.sleep(2 ** attempt * 1e3);
-        }
-        continue;
+    for (let attempt = 0; ; attempt += 1) {
+      const outcome = await this.attempt(method, path, body);
+      if (outcome.ok) {
+        return outcome.value;
       }
-      let text;
-      try {
-        text = await response.text();
-      } catch (cause) {
-        lastError = new GasDeployError("Apps Script API \u306E\u5FDC\u7B54\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", {
-          cause,
-          nextSteps: CONNECTIVITY_NEXT_STEPS2
-        });
-        if (attempt < this.maxRetries) {
-          await this.sleep(2 ** attempt * 1e3);
-        }
-        continue;
+      if (!outcome.retryable || attempt >= this.maxRetries) {
+        throw outcome.error;
       }
-      if (response.ok) {
-        if (text.length === 0) {
-          return {};
-        }
-        try {
-          return JSON.parse(text);
-        } catch {
-          throw new GasDeployError("Apps Script API \u306E\u5FDC\u7B54\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
+      await this.sleep(Math.max(2 ** attempt * 1e3, outcome.retryAfterMs ?? 0));
+    }
+  }
+  async attempt(method, path, body) {
+    let response;
+    try {
+      response = await this.fetchImpl(`${BASE_URL}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: body === void 0 ? void 0 : JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs)
+      });
+    } catch (cause) {
+      if (method === "POST" && !failedBeforeSend(cause)) {
+        return {
+          ok: false,
+          retryable: false,
+          error: outcomeUnknownError("Apps Script API \u3068\u306E\u901A\u4FE1\u304C\u9014\u4E2D\u3067\u5931\u6557\u3057\u307E\u3057\u305F", { cause, code: "connectivity" })
+        };
+      }
+      return {
+        ok: false,
+        retryable: true,
+        error: new GasDeployError("Apps Script API \u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
+          cause,
+          code: "connectivity",
+          nextSteps: CONNECTIVITY_NEXT_STEPS2
+        })
+      };
+    }
+    let text;
+    try {
+      text = await response.text();
+    } catch (cause) {
+      if (method === "POST") {
+        return {
+          ok: false,
+          retryable: false,
+          error: outcomeUnknownError("Apps Script API \u306E\u5FDC\u7B54\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", { cause, code: "connectivity" })
+        };
+      }
+      return {
+        ok: false,
+        retryable: true,
+        error: new GasDeployError("Apps Script API \u306E\u5FDC\u7B54\u3092\u8AAD\u307F\u53D6\u308C\u307E\u305B\u3093\u3067\u3057\u305F", {
+          cause,
+          code: "connectivity",
+          nextSteps: CONNECTIVITY_NEXT_STEPS2
+        })
+      };
+    }
+    if (response.ok) {
+      if (text.length === 0) {
+        return { ok: true, value: {} };
+      }
+      try {
+        return { ok: true, value: JSON.parse(text) };
+      } catch {
+        return {
+          ok: false,
+          retryable: false,
+          error: new GasDeployError("Apps Script API \u306E\u5FDC\u7B54\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F", {
+            code: "response-invalid",
             nextSteps: PARSE_FAILURE_NEXT_STEPS2
-          });
-        }
-      }
-      if (method === "POST" && response.status >= 500) {
-        throw new GasDeployError(
-          `Apps Script API \u304C\u30A8\u30E9\u30FC\u3092\u8FD4\u3057\u307E\u3057\u305F (${response.status})\u3002\u30B5\u30FC\u30D0\u5074\u3067\u51E6\u7406\u304C\u5B8C\u4E86\u3057\u305F\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059`,
-          {
-            nextSteps: [
-              "\u30C7\u30D7\u30ED\u30A4\u4E00\u89A7\u3092\u78BA\u8A8D\u3057\u3001\u610F\u56F3\u3057\u306A\u3044\u30D0\u30FC\u30B8\u30E7\u30F3\u3084\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3066\u3044\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044",
-              "HEAD \u306E\u66F4\u65B0\u306F\u5B8C\u4E86\u3057\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002\u305D\u306E\u5834\u5408\u3001\u518D\u5B9F\u884C\u3057\u3066\u3082\u5DEE\u5206\u30BC\u30ED\u3068\u5224\u5B9A\u3055\u308C\u3066\u30B9\u30AD\u30C3\u30D7\u3055\u308C\u308B\u305F\u3081\u3001\u30C7\u30D7\u30ED\u30A4\u304C\u53E4\u3044\u307E\u307E\u306B\u306A\u308A\u307E\u3059",
-              "\u72B6\u614B\u3092\u78BA\u8A8D\u3057\u305F\u3046\u3048\u3067\u3001\u5FC5\u8981\u306A\u3089\u30C7\u30D7\u30ED\u30A4\u3092\u624B\u52D5\u3067\u4F5C\u6210\u3057\u76F4\u3057\u3066\u304F\u3060\u3055\u3044"
-            ],
-            cause: text
-          }
-        );
-      }
-      lastError = classifyApiError(response.status, text);
-      if (!isRetryable(method, response.status)) {
-        throw lastError;
-      }
-      if (attempt < this.maxRetries) {
-        await this.sleep(2 ** attempt * 1e3);
+          })
+        };
       }
     }
-    throw lastError ?? new GasDeployError("Apps Script API \u3078\u306E\u30EA\u30AF\u30A8\u30B9\u30C8\u304C\u5931\u6557\u3057\u307E\u3057\u305F");
+    if (method === "POST" && response.status >= 500) {
+      return {
+        ok: false,
+        retryable: false,
+        error: outcomeUnknownError(`Apps Script API \u304C\u30A8\u30E9\u30FC\u3092\u8FD4\u3057\u307E\u3057\u305F (${response.status})`, {
+          cause: text,
+          status: response.status,
+          code: "api-error"
+        })
+      };
+    }
+    const error = classifyApiError(response.status, text);
+    if (response.status === 429) {
+      const retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
+      return { ok: false, error, retryable: true, ...retryAfterMs !== void 0 ? { retryAfterMs } : {} };
+    }
+    return { ok: false, error, retryable: response.status >= 500 };
   }
   /**
    * プロジェクトのメタデータだけを読む。存在と閲覧権限の確認に使う。
@@ -29496,8 +29552,10 @@ var AppsScriptClient = class {
   async getProject(scriptId) {
     await this.request("GET", `/projects/${encodePathSegment(scriptId)}`);
   }
-  async getContent(scriptId) {
-    const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content`);
+  /** `versionNumber` を省略すると HEAD を、指定するとそのバージョンのスナップショットを返す。 */
+  async getContent(scriptId, versionNumber) {
+    const query = versionNumber === void 0 ? "" : `?${new URLSearchParams({ versionNumber: String(versionNumber) })}`;
+    const result = await this.request("GET", `/projects/${encodePathSegment(scriptId)}/content${query}`);
     return result.files ?? [];
   }
   async updateContent(scriptId, files) {
@@ -29609,13 +29667,75 @@ function isMassDeletion(deletedCount, remoteCount) {
   return deletedCount >= MASS_DELETION_MIN_FILES && deletedCount >= Math.ceil(remoteCount * MASS_DELETION_RATIO);
 }
 var URL_CHANGE_WARNING = "deployment-id \u304C\u6307\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u30C7\u30D7\u30ED\u30A4\u304C\u4F5C\u6210\u3055\u308C\u3001Web \u30A2\u30D7\u30EA\u306E URL \u304C\u5909\u308F\u308A\u307E\u3059\u3002\u65E2\u5B58\u306E URL \u3092\u7DAD\u6301\u3059\u308B\u306B\u306F deployment-id \u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044";
+async function compareHeadWithDeployment(client, scriptId, deployment, head) {
+  if (deployment.versionNumber === void 0) {
+    return "in-sync";
+  }
+  const deployed = await client.getContent(scriptId, deployment.versionNumber);
+  if (!hasChanges(diffFiles(head, deployed))) {
+    return "in-sync";
+  }
+  const version = await client.getVersion(scriptId, deployment.versionNumber);
+  return deployment.description !== void 0 && deployment.description === version.description ? "behind" : "pinned";
+}
+async function publish(client, options, context) {
+  const { diff, warnings } = context;
+  const versionNumber = await client.createVersion(options.scriptId, options.description);
+  const deployment = options.deploymentId ? await client.updateDeployment(options.scriptId, options.deploymentId, versionNumber, options.description) : await client.createDeployment(options.scriptId, versionNumber, options.description);
+  const deployments = await client.listDeployments(options.scriptId);
+  const versioned = deployments.filter((entry) => entry.versionNumber !== void 0);
+  if (versioned.length >= DEPLOYMENT_COUNT_WARN_THRESHOLD) {
+    warnings.push(
+      `\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4\u6570\u304C ${versioned.length} \u4EF6\u3067\u3059\u3002\u4E0A\u9650\u306F ${DEPLOYMENT_LIMIT} \u4EF6\u306A\u306E\u3067\u3001\u4E0D\u8981\u306A\u30C7\u30D7\u30ED\u30A4\u3092\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
+  }
+  const result = { changed: true, diff, warnings, versionNumber, deploymentId: deployment.deploymentId };
+  if (deployment.webAppUrl !== void 0) {
+    result.webAppUrl = deployment.webAppUrl;
+  }
+  if (context.previousVersionNumber !== void 0) {
+    result.previousVersionNumber = context.previousVersionNumber;
+  }
+  if (context.resumed) {
+    result.resumed = true;
+  }
+  return result;
+}
+async function deployUnchangedHead(client, options, head, diff) {
+  const warnings = [];
+  if (!options.createVersion || options.deploymentId === void 0) {
+    return { changed: false, diff, warnings };
+  }
+  const deployment = await client.getDeployment(options.scriptId, options.deploymentId);
+  const state = await compareHeadWithDeployment(client, options.scriptId, deployment, head);
+  if (state === "in-sync") {
+    return { changed: false, diff, warnings };
+  }
+  if (state === "pinned") {
+    warnings.push(
+      `\u30C7\u30D7\u30ED\u30A4 ${options.deploymentId} \u304C\u6307\u3059 v${deployment.versionNumber} \u306F HEAD \u3068\u5185\u5BB9\u304C\u7570\u306A\u308A\u307E\u3059\u304C\u3001rollback \u306A\u3069\u3067\u610F\u56F3\u7684\u306B\u6307\u3057\u76F4\u3055\u308C\u305F\u72B6\u614B\u3068\u307F\u306A\u3057\u3001\u5909\u66F4\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u3002HEAD \u3092\u53CD\u6620\u3059\u308B\u306B\u306F\u3001\u30D5\u30A1\u30A4\u30EB\u3092\u5909\u66F4\u3057\u3066\u304B\u3089\u30C7\u30D7\u30ED\u30A4\u3059\u308B\u304B\u3001rollback \u30A2\u30AF\u30B7\u30E7\u30F3\u306E version-number \u3067\u53CD\u6620\u5148\u306E\u30D0\u30FC\u30B8\u30E7\u30F3\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`
+    );
+    return { changed: false, diff, warnings };
+  }
+  warnings.push(
+    `\u30D5\u30A1\u30A4\u30EB\u306E\u5DEE\u5206\u306F\u3042\u308A\u307E\u305B\u3093\u304C\u3001HEAD \u304C\u30C7\u30D7\u30ED\u30A4 ${options.deploymentId}\uFF08v${deployment.versionNumber}\uFF09\u306B\u53CD\u6620\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u524D\u56DE\u306E\u5B9F\u884C\u304C\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u4F5C\u6210\u304B\u30C7\u30D7\u30ED\u30A4\u306E\u66F4\u65B0\u306E\u624B\u524D\u3067\u5931\u6557\u3057\u305F\u3068\u307F\u306A\u3057\u3001\u305D\u306E2\u3064\u3060\u3051\u3092\u884C\u3044\u307E\u3059`
+  );
+  if (options.dryRun) {
+    return { changed: true, diff, warnings, resumed: true };
+  }
+  const context = { diff, warnings, resumed: true };
+  if (deployment.versionNumber !== void 0) {
+    context.previousVersionNumber = deployment.versionNumber;
+  }
+  return publish(client, options, context);
+}
 async function deploy(client, options) {
   const warnings = [];
   const local = await collectFiles(options.rootDir, options.ignore);
   const remote = await client.getContent(options.scriptId);
   const diff = diffFiles(local, remote);
   if (!hasChanges(diff)) {
-    return { changed: false, diff, warnings };
+    return deployUnchangedHead(client, options, remote, diff);
   }
   const needsStableUrl = options.projectType === "webapp" || options.projectType === "addon";
   if (needsStableUrl && !options.deploymentId) {
@@ -29645,31 +29765,18 @@ async function deploy(client, options) {
       }
     );
   }
-  let previousVersionNumber;
+  const context = { diff, warnings };
   if (options.createVersion && options.deploymentId !== void 0) {
-    previousVersionNumber = (await client.getDeployment(options.scriptId, options.deploymentId)).versionNumber;
+    const previousVersionNumber = (await client.getDeployment(options.scriptId, options.deploymentId)).versionNumber;
+    if (previousVersionNumber !== void 0) {
+      context.previousVersionNumber = previousVersionNumber;
+    }
   }
   await client.updateContent(options.scriptId, local);
   if (!options.createVersion) {
     return { changed: true, diff, warnings };
   }
-  const versionNumber = await client.createVersion(options.scriptId, options.description);
-  const deployment = options.deploymentId ? await client.updateDeployment(options.scriptId, options.deploymentId, versionNumber, options.description) : await client.createDeployment(options.scriptId, versionNumber, options.description);
-  const deployments = await client.listDeployments(options.scriptId);
-  const versioned = deployments.filter((entry) => entry.versionNumber !== void 0);
-  if (versioned.length >= DEPLOYMENT_COUNT_WARN_THRESHOLD) {
-    warnings.push(
-      `\u30D0\u30FC\u30B8\u30E7\u30F3\u4ED8\u304D\u30C7\u30D7\u30ED\u30A4\u6570\u304C ${versioned.length} \u4EF6\u3067\u3059\u3002\u4E0A\u9650\u306F ${DEPLOYMENT_LIMIT} \u4EF6\u306A\u306E\u3067\u3001\u4E0D\u8981\u306A\u30C7\u30D7\u30ED\u30A4\u3092\u524A\u9664\u3057\u3066\u304F\u3060\u3055\u3044`
-    );
-  }
-  const result = { changed: true, diff, warnings, versionNumber, deploymentId: deployment.deploymentId };
-  if (deployment.webAppUrl !== void 0) {
-    result.webAppUrl = deployment.webAppUrl;
-  }
-  if (previousVersionNumber !== void 0) {
-    result.previousVersionNumber = previousVersionNumber;
-  }
-  return result;
+  return publish(client, options, context);
 }
 
 // packages/core/src/config.ts
@@ -30280,10 +30387,13 @@ function deletionNotice(deleted) {
     ""
   ];
 }
+var RESUMED_NOTICE = "\u30D5\u30A1\u30A4\u30EB\u306E\u5DEE\u5206\u306F\u3042\u308A\u307E\u305B\u3093\u3002HEAD \u304C\u30C7\u30D7\u30ED\u30A4\u306B\u53CD\u6620\u3055\u308C\u3066\u3044\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u30D0\u30FC\u30B8\u30E7\u30F3\u306E\u4F5C\u6210\u3068\u30C7\u30D7\u30ED\u30A4\u306E\u66F4\u65B0\u3060\u3051\u3092\u884C\u3044\u307E\u3059\u3002";
 function renderSummary(result) {
   const lines = ["## GAS \u30C7\u30D7\u30ED\u30A4\u7D50\u679C", ""];
   if (!result.changed) {
     lines.push("\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
+  } else if (result.resumed) {
+    lines.push(RESUMED_NOTICE, "");
   } else {
     lines.push(
       ...deletionNotice(result.diff.deleted),
@@ -30311,7 +30421,10 @@ function renderMultiSummary(result, targets) {
   const lines = ["## GAS \u30C7\u30D7\u30ED\u30A4\u7D50\u679C\uFF08\u8907\u6570\u30D7\u30ED\u30B8\u30A7\u30AF\u30C8\uFF09", ""];
   for (const entry of result.completed) {
     lines.push(`### ${entry.project} (${entry.environment})`, "");
-    lines.push(entry.result.changed ? "\u5909\u66F4\u3042\u308A" : "\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002", "");
+    lines.push(
+      !entry.result.changed ? "\u5DEE\u5206\u304C\u306A\u3044\u305F\u3081\u3001\u5909\u66F4\u306F\u3042\u308A\u307E\u305B\u3093\u3002" : entry.result.resumed ? RESUMED_NOTICE : "\u5909\u66F4\u3042\u308A",
+      ""
+    );
     if (entry.result.changed) {
       lines.push(...deletionNotice(entry.result.diff.deleted));
     }
