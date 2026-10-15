@@ -326,3 +326,165 @@ describe('AppsScriptClient path encoding', () => {
     expect(url).toBe('https://script.googleapis.com/v1/projects/script-abc/deployments/dep%2F1');
   });
 });
+
+describe('AppsScriptClient timeouts', () => {
+  it('passes an AbortSignal so a stalled connection does not wait for the fetch default', async () => {
+    const { client, fetchImpl } = clientWith([{ status: 200, body: '{}' }]);
+    await client.getContent(SCRIPT_ID);
+
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('retries a GET that timed out', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      }
+      return new Response('{}', { status: 200 });
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+
+    await expect(client.getContent(SCRIPT_ID)).resolves.toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AppsScriptClient error codes', () => {
+  // token-check はこの code で reason を決める。付いていないと connectivity が unclassified になる。
+  it('marks repeated connection failures as connectivity', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+
+    const error = (await client.getContent(SCRIPT_ID).catch((e: unknown) => e)) as GasDeployError;
+    expect(error.code).toBe('connectivity');
+  });
+
+  it('marks an unparsable 200 response as response-invalid', async () => {
+    const { client } = clientWith([{ status: 200, body: 'not-json{' }]);
+
+    const error = (await client.getContent(SCRIPT_ID).catch((e: unknown) => e)) as GasDeployError;
+    expect(error.code).toBe('response-invalid');
+  });
+
+  it('keeps the status on a POST 5xx', async () => {
+    const { client } = clientWith([{ status: 503, body: 'unavailable' }]);
+
+    const error = (await client.createVersion(SCRIPT_ID, 'desc').catch((e: unknown) => e)) as GasDeployError;
+    expect(error.status).toBe(503);
+    expect(error.code).toBe('api-error');
+  });
+});
+
+describe('AppsScriptClient POST failures after the request may have been sent', () => {
+  function postClient(fetchImpl: () => Promise<Response>) {
+    const mock = vi.fn(fetchImpl);
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: mock as unknown as typeof fetch, sleep });
+    return { client, fetchImpl: mock };
+  }
+
+  it('does not retry a POST that timed out, because the version may already exist', async () => {
+    const { client, fetchImpl } = postClient(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    });
+
+    const error = (await client.createVersion(SCRIPT_ID, 'desc').catch((e: unknown) => e)) as GasDeployError;
+    expect(error).toBeInstanceOf(GasDeployError);
+    expect(error.message).toContain('処理が完了した可能性があります');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a POST whose connection was reset', async () => {
+    const { client, fetchImpl } = postClient(async () => {
+      throw new TypeError('fetch failed', { cause: Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }) });
+    });
+
+    await expect(client.createDeployment(SCRIPT_ID, 3, 'desc')).rejects.toThrowError(GasDeployError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a POST that failed before anything was sent', async () => {
+    let calls = 0;
+    const { client, fetchImpl } = postClient(async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new TypeError('fetch failed', { cause: Object.assign(new Error('connect refused'), { code: 'ECONNREFUSED' }) });
+      }
+      return new Response(JSON.stringify({ versionNumber: 4 }), { status: 200 });
+    });
+
+    await expect(client.createVersion(SCRIPT_ID, 'desc')).resolves.toBe(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a POST whose response body could not be read', async () => {
+    const { client, fetchImpl } = postClient(
+      async () => ({ text: () => Promise.reject(new Error('stream reset')) }) as unknown as Response,
+    );
+
+    const error = (await client.createVersion(SCRIPT_ID, 'desc').catch((e: unknown) => e)) as GasDeployError;
+    expect(error.message).toContain('処理が完了した可能性があります');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AppsScriptClient Retry-After', () => {
+  function clientWithHeaders(responses: Array<{ status: number; body: string; headers?: Record<string, string> }>) {
+    let index = 0;
+    const fetchImpl = vi.fn(async () => {
+      const response = responses[Math.min(index, responses.length - 1)]!;
+      index += 1;
+      return new Response(response.body, { status: response.status, headers: response.headers ?? {} });
+    });
+    const sleep = vi.fn(async (_ms: number) => undefined);
+    const client = new AppsScriptClient('at-123', { fetch: fetchImpl as unknown as typeof fetch, sleep });
+    return { client, sleep };
+  }
+
+  it('waits as long as Retry-After asks when it is longer than the backoff', async () => {
+    const { client, sleep } = clientWithHeaders([
+      { status: 429, body: 'rate limited', headers: { 'Retry-After': '5' } },
+      { status: 200, body: '{}' },
+    ]);
+
+    await client.getContent(SCRIPT_ID);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([5000]);
+  });
+
+  it('keeps the backoff when Retry-After is shorter', async () => {
+    const { client, sleep } = clientWithHeaders([
+      { status: 429, body: 'rate limited', headers: { 'Retry-After': '0' } },
+      { status: 200, body: '{}' },
+    ]);
+
+    await client.getContent(SCRIPT_ID);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([1000]);
+  });
+
+  it('caps an excessive Retry-After at one minute', async () => {
+    const { client, sleep } = clientWithHeaders([
+      { status: 429, body: 'rate limited', headers: { 'Retry-After': '3600' } },
+      { status: 200, body: '{}' },
+    ]);
+
+    await client.getContent(SCRIPT_ID);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([60_000]);
+  });
+
+  it('ignores a Retry-After that is not a number of seconds', async () => {
+    const { client, sleep } = clientWithHeaders([
+      { status: 429, body: 'rate limited', headers: { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' } },
+      { status: 200, body: '{}' },
+    ]);
+
+    await client.getContent(SCRIPT_ID);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([1000]);
+  });
+});

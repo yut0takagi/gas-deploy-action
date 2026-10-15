@@ -3,6 +3,9 @@ import type { Credentials } from './types.js';
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
+/** トークン交換のタイムアウト。fetch の既定（5分）のまま待たせないため。 */
+const TOKEN_TIMEOUT_MS = 30_000;
+
 const EXPIRY_NEXT_STEPS = [
   'OAuth 同意画面が「テスト」状態の場合、refresh token は7日で失効します。「本番」（個人アカウント）または「内部」（Workspace）に変更してください',
   'Google Workspace の再認証ポリシーが有効な場合、`invalid_rapt` エラーとともに定期的に失効します。無人実行には再認証を要求されない専用アカウントを使ってください',
@@ -94,6 +97,7 @@ export async function exchangeToken(
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
     });
   } catch (cause) {
     // ネットワーク層の失敗。送信した credentials は含まれないため cause を保持してよい。

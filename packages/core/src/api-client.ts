@@ -6,6 +6,31 @@ const MANIFEST_FILE_NAME = 'appsscript';
 const DEFAULT_MAX_RETRIES = 3;
 
 /**
+ * 1リクエストあたりの上限。応答本文の受信までを含む。
+ *
+ * 指定しないと fetch（undici）の既定の5分が効き、リトライ予算を使い切るまで20分以上
+ * 待つことになる。Apps Script API は数 MB の updateContent でも数秒で返るので、
+ * 60秒を超えるのは接続が詰まっているときだけと見てよい。
+ */
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+/** Retry-After に従う上限。これより長い指定でも、この時間だけ待って次を試す。 */
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/**
+ * リクエストを送る前に失敗したと確定できるエラーコード（fetch が投げる TypeError の cause）。
+ * 名前解決と TCP 接続の段階の失敗で、サーバには何も届いていない。
+ */
+const PRE_SEND_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/**
  * deployments.list は pageSize を指定しないと1件しか返さない（実測）。
  * 明示的に指定しないとデプロイ数の把握が丸ごと壊れる。
  */
@@ -25,10 +50,20 @@ const PARSE_FAILURE_NEXT_STEPS = [
   '一時的な障害の可能性があります。しばらく待って再実行してください',
 ];
 
+const OUTCOME_UNKNOWN_NEXT_STEPS = [
+  'デプロイ一覧を確認し、意図しないバージョンやデプロイが作成されていないか確認してください',
+  'HEAD の更新は完了している可能性があります。その場合、再実行しても差分ゼロと判定されてスキップされるため、デプロイが古いままになります',
+  '状態を確認したうえで、必要ならデプロイを手動で作成し直してください',
+];
+
+type HttpMethod = 'GET' | 'PUT' | 'POST';
+
 export interface ClientOptions {
   fetch?: typeof fetch;
   maxRetries?: number;
   sleep?: (milliseconds: number) => Promise<void>;
+  /** 1リクエストあたりのタイムアウト。テストから差し替えるための入口。 */
+  timeoutMs?: number;
 }
 
 interface RawDeployment {
@@ -53,19 +88,41 @@ function toDeployment(raw: RawDeployment): Deployment {
 }
 
 /**
- * 429 はどのメソッドでもリトライしてよい（処理前に弾かれる拒否のため、
- * リトライしても二重処理にならない）。
+ * 1回の試行の結果。リトライするかどうかの判断を、失敗を作った場所に置くための形。
  *
- * 5xx の POST はサーバ側で処理済みかどうか判別できない。リトライすると
- * バージョンやデプロイが二重に作られ、20枠しかないデプロイを黙って消費する。
- * Apps Script には冪等キーが無いため事後の検出もできない。GET/PUT は
- * べき等なので 5xx でもリトライしてよい。
+ * 判断の基準は1つだけで、「もう一度送ったときに二重に処理されうるか」。429 は処理の前に
+ * 弾かれるのでどのメソッドでも繰り返してよい。GET / PUT はべき等なので、5xx でも通信の
+ * 失敗でも繰り返してよい。POST（versions.create / deployments.create）は、サーバに届いた
+ * 可能性が残る失敗では繰り返さない。繰り返すとバージョンやデプロイが二重に作られ、
+ * 20枠しかないデプロイを黙って消費する。Apps Script には冪等キーが無く、事後の検出もできない。
  */
-function isRetryable(method: string, status: number): boolean {
-  if (status === 429) {
-    return true;
+type Attempt =
+  | { ok: true; value: unknown }
+  | { ok: false; error: GasDeployError; retryable: boolean; retryAfterMs?: number };
+
+/** fetch の失敗が、リクエストを送る前に起きたと確定できるか。確定できなければ false。 */
+function failedBeforeSend(cause: unknown): boolean {
+  const code = (cause as { cause?: { code?: unknown } } | null | undefined)?.cause?.code;
+  return typeof code === 'string' && PRE_SEND_ERROR_CODES.has(code);
+}
+
+/**
+ * Retry-After をミリ秒に直す。秒数の形式だけを扱う。HTTP 日付の形式や不正な値は
+ * 無視して指数バックオフに任せる（Google の API が日付の形式で返す例を確認していない）。
+ */
+function parseRetryAfter(header: string | null): number | undefined {
+  if (header === null || !/^\d+$/.test(header.trim())) {
+    return undefined;
   }
-  return status >= 500 && method !== 'POST';
+  return Math.min(Number(header.trim()) * 1000, MAX_RETRY_AFTER_MS);
+}
+
+/** POST がサーバ側で処理済みかどうか判別できない失敗。リトライせず、状態の確認を促す。 */
+function outcomeUnknownError(reason: string, details: { cause?: unknown; status?: number; code: 'connectivity' | 'api-error' }): GasDeployError {
+  return new GasDeployError(`${reason}。サーバ側で処理が完了した可能性があります`, {
+    ...details,
+    nextSteps: OUTCOME_UNKNOWN_NEXT_STEPS,
+  });
 }
 
 function encodePathSegment(value: string): string {
@@ -76,6 +133,7 @@ export class AppsScriptClient {
   private readonly fetchImpl: typeof fetch;
   private readonly maxRetries: number;
   private readonly sleep: (milliseconds: number) => Promise<void>;
+  private readonly timeoutMs: number;
 
   constructor(
     private readonly accessToken: string,
@@ -84,92 +142,116 @@ export class AppsScriptClient {
     this.fetchImpl = options.fetch ?? fetch;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
-  private async request(method: string, path: string, body?: unknown): Promise<unknown> {
-    let lastError: GasDeployError | undefined;
-
-    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
-      let response: Response;
-      try {
-        response = await this.fetchImpl(`${BASE_URL}${path}`, {
-          method,
-          headers: {
-            Authorization: `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-      } catch (cause) {
-        // DNS 解決失敗や接続拒否など、レスポンスに到達する前の失敗。
-        // 429/5xx と同じリトライ予算に載せる。
-        lastError = new GasDeployError('Apps Script API に接続できませんでした', {
-          cause,
-          nextSteps: CONNECTIVITY_NEXT_STEPS,
-        });
-        if (attempt < this.maxRetries) {
-          await this.sleep(2 ** attempt * 1000);
-        }
-        continue;
+  private async request(method: HttpMethod, path: string, body?: unknown): Promise<unknown> {
+    for (let attempt = 0; ; attempt += 1) {
+      const outcome = await this.attempt(method, path, body);
+      if (outcome.ok) {
+        return outcome.value;
       }
-
-      let text: string;
-      try {
-        text = await response.text();
-      } catch (cause) {
-        // ヘッダー受信後に接続が切れた場合。本文は取得できていないため
-        // cause を保持してよい（クレデンシャルやソースコードは含まれない）。
-        lastError = new GasDeployError('Apps Script API の応答を読み取れませんでした', {
-          cause,
-          nextSteps: CONNECTIVITY_NEXT_STEPS,
-        });
-        if (attempt < this.maxRetries) {
-          await this.sleep(2 ** attempt * 1000);
-        }
-        continue;
+      if (!outcome.retryable || attempt >= this.maxRetries) {
+        throw outcome.error;
       }
+      await this.sleep(Math.max(2 ** attempt * 1000, outcome.retryAfterMs ?? 0));
+    }
+  }
 
-      if (response.ok) {
-        if (text.length === 0) {
-          return {};
-        }
-        try {
-          return JSON.parse(text);
-        } catch {
-          // getContent の成功応答にはユーザーのスクリプトソースが含まれるため、
-          // cause には本文を載せない。
-          throw new GasDeployError('Apps Script API の応答を解析できませんでした', {
+  private async attempt(method: HttpMethod, path: string, body: unknown): Promise<Attempt> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${BASE_URL}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (cause) {
+      // タイムアウトや接続のリセットは、リクエストが届いた後でも起きる。
+      if (method === 'POST' && !failedBeforeSend(cause)) {
+        return {
+          ok: false,
+          retryable: false,
+          error: outcomeUnknownError('Apps Script API との通信が途中で失敗しました', { cause, code: 'connectivity' }),
+        };
+      }
+      return {
+        ok: false,
+        retryable: true,
+        error: new GasDeployError('Apps Script API に接続できませんでした', {
+          cause,
+          code: 'connectivity',
+          nextSteps: CONNECTIVITY_NEXT_STEPS,
+        }),
+      };
+    }
+
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (cause) {
+      // ヘッダーが届いた時点で、サーバは処理を終えている。本文は取得できていないため
+      // cause を保持してよい（クレデンシャルやソースコードは含まれない）。
+      if (method === 'POST') {
+        return {
+          ok: false,
+          retryable: false,
+          error: outcomeUnknownError('Apps Script API の応答を読み取れませんでした', { cause, code: 'connectivity' }),
+        };
+      }
+      return {
+        ok: false,
+        retryable: true,
+        error: new GasDeployError('Apps Script API の応答を読み取れませんでした', {
+          cause,
+          code: 'connectivity',
+          nextSteps: CONNECTIVITY_NEXT_STEPS,
+        }),
+      };
+    }
+
+    if (response.ok) {
+      if (text.length === 0) {
+        return { ok: true, value: {} };
+      }
+      try {
+        return { ok: true, value: JSON.parse(text) };
+      } catch {
+        // getContent の成功応答にはユーザーのスクリプトソースが含まれるため、
+        // cause には本文を載せない。
+        return {
+          ok: false,
+          retryable: false,
+          error: new GasDeployError('Apps Script API の応答を解析できませんでした', {
+            code: 'response-invalid',
             nextSteps: PARSE_FAILURE_NEXT_STEPS,
-          });
-        }
-      }
-
-      if (method === 'POST' && response.status >= 500) {
-        // サーバ側で処理が完了していた場合、リトライすると二重にバージョン/
-        // デプロイが作られる可能性があるため、リトライせず状態確認を促す。
-        throw new GasDeployError(
-          `Apps Script API がエラーを返しました (${response.status})。サーバ側で処理が完了した可能性があります`,
-          {
-            nextSteps: [
-              'デプロイ一覧を確認し、意図しないバージョンやデプロイが作成されていないか確認してください',
-              'HEAD の更新は完了している可能性があります。その場合、再実行しても差分ゼロと判定されてスキップされるため、デプロイが古いままになります',
-              '状態を確認したうえで、必要ならデプロイを手動で作成し直してください',
-            ],
-            cause: text,
-          },
-        );
-      }
-
-      lastError = classifyApiError(response.status, text);
-      if (!isRetryable(method, response.status)) {
-        throw lastError;
-      }
-      if (attempt < this.maxRetries) {
-        await this.sleep(2 ** attempt * 1000);
+          }),
+        };
       }
     }
 
-    throw lastError ?? new GasDeployError('Apps Script API へのリクエストが失敗しました');
+    if (method === 'POST' && response.status >= 500) {
+      return {
+        ok: false,
+        retryable: false,
+        error: outcomeUnknownError(`Apps Script API がエラーを返しました (${response.status})`, {
+          cause: text,
+          status: response.status,
+          code: 'api-error',
+        }),
+      };
+    }
+
+    const error = classifyApiError(response.status, text);
+    if (response.status === 429) {
+      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
+      return { ok: false, error, retryable: true, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
+    }
+    return { ok: false, error, retryable: response.status >= 500 };
   }
 
   /**

@@ -69,8 +69,9 @@ function toStatus(code: GasErrorCode | undefined): { status: TokenHealthStatus; 
 
 const DEFAULT_DEPS: TokenHealthDeps = {
   exchangeToken: (credentials) => getAccessToken(credentials),
+  // 権限の確認にはメタデータで足りる。getContent だとスクリプトのソース全体を落とす。
   readProject: async (accessToken, scriptId) => {
-    await new AppsScriptClient(accessToken).getContent(scriptId);
+    await new AppsScriptClient(accessToken).getProject(scriptId);
   },
 };
 
